@@ -4,12 +4,14 @@ from torch.distributions import MultivariateNormal, Normal
 from torchdiffeq import odeint
 
 from .utils import *
+from .gpode import GPODE
 
 
 # model implementation
 class ODEGPVAE(nn.Module):
     def __init__(self, n_filt=8, q=8, device="cpu"):
         super(ODEGPVAE, self).__init__()
+
         h_dim = n_filt*4**3 # encoder output is [4*n_filt,4,4]
         # encoder
         self.encoder = nn.Sequential(
@@ -27,11 +29,13 @@ class ODEGPVAE(nn.Module):
         self.fc1 = nn.Linear(h_dim, 2*q)
         self.fc2 = nn.Linear(h_dim, 2*q)
         self.fc3 = nn.Linear(q, h_dim)
+
         # differential function
-        # to use a deterministic differential function, set bnn=False and self.beta=0.0
-        self.bnn = BNN(2*q, q, n_hid_layers=2, n_hidden=50, act='celu', layer_norm=True, bnn=True)
+        self.ode_model = GPODE(2*q, q).to(device).to(torch.float64)
+
         # downweighting the BNN KL term is helpful if self.bnn is heavily overparameterized
         self.beta = 1.0 # 2*q/self.bnn.kl().numel()
+
         # decoder
         self.decoder = nn.Sequential(
             UnFlatten(4),
@@ -111,7 +115,7 @@ class ODEGPVAE(nn.Module):
         ''' Input
                 X          - input images [N,T,nc,d,d]
                 Ndata      - number of sequences in the dataset (required for elbo)
-                L          - number of Monta Carlo draws (from BNN)
+                L          - number of Monta Carlo draws (from GP)
                 inst_enc   - whether instant encoding is used or not
                 method     - numerical integration method
                 dt         - numerical integration step size 
@@ -126,7 +130,7 @@ class ODEGPVAE(nn.Module):
         '''
         # encode
         [N,T,nc,d,d] = X.shape
-        h = self.encoder(X[:,0])
+        h = self.encoder(X[:,0]) #pass initial state through the encoder
         qz0_m, qz0_logv = self.fc1(h), self.fc2(h) # N,2q & N,2q
         q = qz0_m.shape[1]//2
         # latent samples
@@ -139,8 +143,8 @@ class ODEGPVAE(nn.Module):
         logpL = []
         # sample L trajectories
         for l in range(L):
-            f       = self.bnn.draw_f() # draw a differential function # TODO sample here from a GP 
-            oderhs  = lambda t,vs: self.ode2vae_rhs(t,vs,f) # make the ODE forward function
+            zt,logp = self.ode_model.forward_trajectory((z0, logp0), t)
+
             zt,logp = odeint(oderhs,(z0,logp0),t,method=method) # T,N,2q & T,N
             ztL.append(zt.permute([1,0,2]).unsqueeze(0)) # 1,N,T,2q
             logpL.append(logp.permute([1,0]).unsqueeze(0)) # 1,N,T
