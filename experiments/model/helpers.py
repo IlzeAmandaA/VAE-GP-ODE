@@ -28,8 +28,8 @@ def integrate(f, x0, T, solver='rk4'):
     elif solver=='rk4':
         step_fnc = rk4_step
 
-    q = x0.shape[1]//2
-    ds = x0[:,:q]
+    # q = x0.shape[1]//2
+    # ds = x0[:,:q]
     X  = [x0]
     ode_steps = len(T)-1
     for i in range(ode_steps):
