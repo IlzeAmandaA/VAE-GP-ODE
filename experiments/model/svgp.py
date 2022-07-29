@@ -170,18 +170,33 @@ class SVGP(ApproximateGP):
             returns - samples [P,N,n]
         '''
         return self(x).rsample(torch.Size([P]))
-    
+
+    def ode_rhs(self, t,vs_logp,f):
+        vs, logp = vs_logp
+        q = vs.shape[1]//2
+        dv = f(vs) # N,q 
+        ds = vs[:,:q]  # N,q
+        dvs = torch.cat([dv,ds],1) # N,2q
+        ddvi_dvi = torch.stack(
+                    [torch.autograd.grad(dv[:,i],vs,torch.ones_like(dv[:,i]),
+                    retain_graph=True,create_graph=True)[0].contiguous()[:,i]
+                    for i in range(q)],1) # N,q --> df(x)_i/dx_i, i=1..q
+        tr_ddvi_dvi = torch.sum(ddvi_dvi,1) # N
+        return (dvs,-tr_ddvi_dvi)        
+
+           
     def draw_posterior_function(self, S=100, P=1): #TODO adjust f(x) for 2 inputs (i think)  CHECK
-        ''' S - number of bases
+        ''' 
+            Sampling with Matheron's rule
+            S - number of bases
             P - number of function draws
         '''
         nout = self.nout
         omega,tau,w,nu = self.cache(S,P) # nu [P,M,nout]
         def f(x):
-            ''' x - evaluation points [N,n] 
+            ''' x - evaluation points [N,n] our latent z0 : N, 2q 
                 returns - function outputs [N,nout] or [P,N,nout]
             '''
-            #vs, logp = x
             N = x.shape[0]
             prior = self.rff(x, omega, tau, w) # P,N,nout
             Kxz = self.covar_module(x,self.Z).evaluate() # nout,N,M

@@ -31,7 +31,7 @@ class ODEGPVAE(nn.Module):
         self.fc3 = nn.Linear(q, h_dim)
 
         # differential function
-        self.ode_model = GPODE(2*q, q).to(device).to(torch.float64)
+        self.ode_model = GPODE(2*q, q)
 
         # downweighting the BNN KL term is helpful if self.bnn is heavily overparameterized
         self.beta = 1.0 # 2*q/self.bnn.kl().numel()
@@ -93,11 +93,12 @@ class ODEGPVAE(nn.Module):
         log_pzt = log_pzt.view([L,N,T]) # L,N,T
         kl_zt   = logpL - log_pzt  # L,N,T
         kl_z    = kl_zt.sum(2).mean(0) # N
-        kl_w    = self.bnn.kl().sum()
+        kl_w    = self.ode_model.loss(X,XrecL, Ndata)
         # likelihood
         XL = X.repeat([L,1,1,1,1,1]) # L,N,T,nc,d,d 
         lhood_L = torch.log(1e-3+XrecL)*XL + torch.log(1e-3+1-XrecL)*(1-XL) # L,N,T,nc,d,d
         lhood = lhood_L.sum([2,3,4,5]).mean(0) # N
+
         if qz_enc_m is not None: # instant encoding
             qz_enc_mL    = qz_enc_m.repeat([L,1])  # L*N*T,2*q
             qz_enc_logvL = qz_enc_logv.repeat([L,1])  # L*N*T,2*q
@@ -109,6 +110,7 @@ class ODEGPVAE(nn.Module):
             inst_enc_KL = inst_enc_KL.sum(2).mean(0) # N
             return Ndata*lhood.mean(), Ndata*kl_z.mean(), kl_w, Ndata*inst_enc_KL.mean()
         else:
+
             return Ndata*lhood.mean(), Ndata*kl_z.mean(), kl_w
 
     def forward(self, X, Ndata, L=1, inst_enc=False, method='dopri5', dt=0.1):
@@ -134,7 +136,7 @@ class ODEGPVAE(nn.Module):
         qz0_m, qz0_logv = self.fc1(h), self.fc2(h) # N,2q & N,2q
         q = qz0_m.shape[1]//2
         # latent samples
-        eps   = torch.randn_like(qz0_m)  # N,2q
+        eps   = torch.randn_like(qz0_m) #, dtype=torch.float).to(self.device)  # N,2q
         z0    = qz0_m + eps*torch.exp(qz0_logv) # N,2q
         logp0 = self.mvn.log_prob(eps) # N 
         # ODE
@@ -143,18 +145,20 @@ class ODEGPVAE(nn.Module):
         logpL = []
         # sample L trajectories
         for l in range(L):
-            zt,logp = self.ode_model.forward_trajectory((z0, logp0), t)
-
-            zt,logp = odeint(oderhs,(z0,logp0),t,method=method) # T,N,2q & T,N
+            zt,logp = self.ode_model.forward_trajectory(z0, logp0, t) # T,N,2q & T,N
             ztL.append(zt.permute([1,0,2]).unsqueeze(0)) # 1,N,T,2q
             logpL.append(logp.permute([1,0]).unsqueeze(0)) # 1,N,T
+
         ztL   = torch.cat(ztL,0) # L,N,T,2q
         logpL = torch.cat(logpL) # L,N,T
+        
         # decode
         st_muL = ztL[:,:,:,q:] # L,N,T,q
         s = self.fc3(st_muL.contiguous().view([L*N*T,q]) ) # L*N*T,h_dim
         Xrec = self.decoder(s) # L*N*T,nc,d,d
         Xrec = Xrec.view([L,N,T,nc,d,d]) # L,N,T,nc,d,d
+
+
         # likelihood and elbo
         if inst_enc:
             h = self.encoder(X.contiguous().view([N*T,nc,d,d]))
@@ -162,9 +166,17 @@ class ODEGPVAE(nn.Module):
             lhood, kl_z, kl_w, inst_KL = \
                 self.elbo(qz0_m, qz0_logv, ztL, logpL, X, Xrec, Ndata, qz_enc_m, qz_enc_logv)
             elbo = lhood - kl_z - inst_KL - self.beta*kl_w
+
         else:
+            '''
+            lhood - vae
+            kl_z - prior on ODE trajcetories
+            kl_w - prior on BNN weights
+            '''
             lhood, kl_z, kl_w = self.elbo(qz0_m, qz0_logv, ztL, logpL, X, Xrec, Ndata) # TODO check loss term for GP-ODE (might have to adjust the loss here)
             elbo = lhood - kl_z - self.beta*kl_w
+
+
         return Xrec, qz0_m, qz0_logv, ztL, elbo, lhood, kl_z, self.beta*kl_w
 
     def mean_rec(self, X, method='dopri5', dt=0.1):

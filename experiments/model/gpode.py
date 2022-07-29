@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn   
+from torchdiffeq import odeint
 
 from .svgp import SVGP
 from .helpers import integrate
@@ -67,8 +68,11 @@ class GPODE(nn.Module):
         self.svgp  = SVGP(Z, nout, kernel=kernel, u_var=var_appr)
         self.loss = ELBO(self.svgp)
 
-    def forward_trajectory(self, x0, ts):
-        gp_draw = self.svgp.draw_posterior_function()
-        odef = lambda t,x: gp_draw(x)
-        return integrate(odef, x0, ts)
+    def forward_trajectory(self, z0, logp0, ts):
+        gp_draw = self.svgp.draw_posterior_function() #draw a differential function from GP
+       # odef = lambda t,x: gp_draw(x)
+        oderhs = lambda t, x: self.svgp.ode_rhs(t,x,gp_draw) # make the ODE forward function 
+        zt, logp = odeint(oderhs, (z0, logp0), ts,method="rk4") # T,N,2q & T,N
+        # integrate(odef, x0, ts)
+        return zt, logp
         

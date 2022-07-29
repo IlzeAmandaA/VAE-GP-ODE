@@ -20,10 +20,16 @@ def rk4_step(f,h,t,x):
     return (k1+2*k2+2*k3+k4) / 6
 
 def integrate(f, x0, T, solver='rk4'):
+    '''
+    x0: N 2q
+    '''
     if solver=='euler':
         step_fnc = euler_step
     elif solver=='rk4':
         step_fnc = rk4_step
+
+    q = x0.shape[1]//2
+    ds = x0[:,:q]
     X  = [x0]
     ode_steps = len(T)-1
     for i in range(ode_steps):
