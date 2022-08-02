@@ -68,6 +68,22 @@ class ODEGPVAE(nn.Module):
         tr_ddvi_dvi = torch.sum(ddvi_dvi,1) # N
         return (dvs,-tr_ddvi_dvi)
 
+
+    def rec_lhood(self, x, x_rec_mu, x_rec_log_sigma_sq, mean=False):
+        N = x.shape[0]
+        x = x.view(1,0,2) # T,N,D
+		if mean:
+            x = x.view(-1,self.D)
+		else:
+			x = tf.reshape(tf.tile(x,[1,1,self.L]), [-1, self.D])
+		if self.dec_out == 'bernoulli':
+			lhood = tf.reduce_sum(x*tf.log(1e-5+x_rec_mu) + (1-x)*tf.log(1e-5+1-x_rec_mu),1)
+		elif self.dec_out == 'normal':
+			mvn = tfd.MultivariateNormalDiag(loc=x_rec_mu, scale_diag=tf.sqrt(1e-10 + tf.exp(x_rec_log_sigma_sq)))
+			lhood = tf.reduce_sum(mvn.log_prob(x))
+		return tf.reduce_sum(lhood) / tf.cast(N,tf.float32) / self.L # = 1/N * \sum_{i,t} x_t^i
+
+
     def elbo(self, qz_m, qz_logv, zode_L, logpL, X, XrecL, Ndata, qz_enc_m=None, qz_enc_logv=None):
         ''' Input:
                 qz_m        - latent means [N,2q]
@@ -94,7 +110,8 @@ class ODEGPVAE(nn.Module):
         kl_zt   = logpL - log_pzt  # L,N,T
         kl_z    = kl_zt.sum(2).mean(0) # N
         kl_w    = self.ode_model.loss(X,XrecL, Ndata)
-        # likelihood
+
+        # reconstruction likelihood (?) #TODO ask about this 
         XL = X.repeat([L,1,1,1,1,1]) # L,N,T,nc,d,d 
         lhood_L = torch.log(1e-3+XrecL)*XL + torch.log(1e-3+1-XrecL)*(1-XL) # L,N,T,nc,d,d
         lhood = lhood_L.sum([2,3,4,5]).mean(0) # N
