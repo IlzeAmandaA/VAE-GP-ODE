@@ -5,55 +5,38 @@ from torchdiffeq import odeint
 
 from .utils import *
 from .gpode import GPODE
+from .vae import Encoder, Decoder
 
 
 # model implementation
 class ODEGPVAE(nn.Module):
-    def __init__(self, n_filt=8, q=8, device="cpu"):
+    def __init__(self, n_filt=8, q=8, device="cpu", v_steps=10):
         super(ODEGPVAE, self).__init__()
+        
+        #number of data points from time 0 used in encoding velocity
+        self.v_steps = v_steps
+
+        # encoder position
+        self.enc_s = Encoder(steps= 1, n_filt=n_filt, q=q)
+
+        # encoder velocity
+        self.enc_v = Encoder(steps = v_steps, n_filt=n_filt, q=q)
 
         h_dim = n_filt*4**3 # encoder output is [4*n_filt,4,4]
-        # encoder
-        self.encoder = nn.Sequential(
-            nn.Conv2d(1, n_filt, kernel_size=5, stride=2, padding=(2,2)), # 14,14
-            nn.BatchNorm2d(n_filt),
-            nn.ReLU(),
-            nn.Conv2d(n_filt, n_filt*2, kernel_size=5, stride=2, padding=(2,2)), # 7,7
-            nn.BatchNorm2d(n_filt*2),
-            nn.ReLU(),
-            nn.Conv2d(n_filt*2, n_filt*4, kernel_size=5, stride=2, padding=(2,2)),
-            nn.ReLU(),
-            Flatten()
-        )
-
-        self.fc1 = nn.Linear(h_dim, 2*q)
-        self.fc2 = nn.Linear(h_dim, 2*q)
         self.fc3 = nn.Linear(q, h_dim)
 
         # differential function
         self.ode_model = GPODE(2*q, q)
 
+        # decoder
+        self.decoder = Decoder(n_filt=n_filt)
+
+        self._zero_mean = torch.zeros(q).to(device)
+        self._eye_covar = torch.eye(q).to(device) 
+        self.mvn = MultivariateNormal(self._zero_mean, self._eye_covar)
+
         # downweighting the BNN KL term is helpful if self.bnn is heavily overparameterized
         self.beta = 1.0 # 2*q/self.bnn.kl().numel()
-
-        # decoder
-        self.decoder = nn.Sequential(
-            UnFlatten(4),
-            nn.ConvTranspose2d(h_dim//16, n_filt*8, kernel_size=3, stride=1, padding=(0,0)),
-            nn.BatchNorm2d(n_filt*8),
-            nn.ReLU(),
-            nn.ConvTranspose2d(n_filt*8, n_filt*4, kernel_size=5, stride=2, padding=(1,1)),
-            nn.BatchNorm2d(n_filt*4),
-            nn.ReLU(),
-            nn.ConvTranspose2d(n_filt*4, n_filt*2, kernel_size=5, stride=2, padding=(1,1), output_padding=(1,1)),
-            nn.BatchNorm2d(n_filt*2),
-            nn.ReLU(),
-            nn.ConvTranspose2d(n_filt*2, 1, kernel_size=5, stride=1, padding=(2,2)),
-            nn.Sigmoid(),
-        )
-        self._zero_mean = torch.zeros(2*q).to(device)
-        self._eye_covar = torch.eye(2*q).to(device) 
-        self.mvn = MultivariateNormal(self._zero_mean, self._eye_covar)
 
     def ode2vae_rhs(self,t,vs_logp,f):
         vs, logp = vs_logp # N,2q & N
@@ -67,21 +50,6 @@ class ODEGPVAE(nn.Module):
                     for i in range(q)],1) # N,q --> df(x)_i/dx_i, i=1..q
         tr_ddvi_dvi = torch.sum(ddvi_dvi,1) # N
         return (dvs,-tr_ddvi_dvi)
-
-
-    def rec_lhood(self, x, x_rec_mu, x_rec_log_sigma_sq, mean=False):
-        N = x.shape[0]
-        x = x.view(1,0,2) # T,N,D
-		if mean:
-            x = x.view(-1,self.D)
-		else:
-			x = tf.reshape(tf.tile(x,[1,1,self.L]), [-1, self.D])
-		if self.dec_out == 'bernoulli':
-			lhood = tf.reduce_sum(x*tf.log(1e-5+x_rec_mu) + (1-x)*tf.log(1e-5+1-x_rec_mu),1)
-		elif self.dec_out == 'normal':
-			mvn = tfd.MultivariateNormalDiag(loc=x_rec_mu, scale_diag=tf.sqrt(1e-10 + tf.exp(x_rec_log_sigma_sq)))
-			lhood = tf.reduce_sum(mvn.log_prob(x))
-		return tf.reduce_sum(lhood) / tf.cast(N,tf.float32) / self.L # = 1/N * \sum_{i,t} x_t^i
 
 
     def elbo(self, qz_m, qz_logv, zode_L, logpL, X, XrecL, Ndata, qz_enc_m=None, qz_enc_logv=None):
@@ -147,16 +115,26 @@ class ODEGPVAE(nn.Module):
                 lhood      - reconstruction likelihood
                 kl_z       - KL
         '''
-        # encode
+        ######## encode ###########
         [N,T,nc,d,d] = X.shape
-        h = self.encoder(X[:,0]) #pass initial state through the encoder
-        qz0_m, qz0_logv = self.fc1(h), self.fc2(h) # N,2q & N,2q
-        q = qz0_m.shape[1]//2
+        #h = self.encoder(X[:,0]) #pass initial state through the encoder
+        s0_mu, s0_logv = self.enc_s(X[:,0])
+        v0_mu, v0_logv = self.enc_v(X[:,0:self.v_steps])
+        
+
+        q = s0_mu.shape[1]
+
         # latent samples
-        eps   = torch.randn_like(qz0_m) #, dtype=torch.float).to(self.device)  # N,2q
-        z0    = qz0_m + eps*torch.exp(qz0_logv) # N,2q
-        logp0 = self.mvn.log_prob(eps) # N 
-        # ODE
+        eps_s0   = torch.randn_like(s0_mu) #N,q
+        eps_v0   = torch.randn_like(v0_mu) #N,q
+        s0 = s0_mu + eps_s0*torch.exp(s0_logv) #N,q
+        v0 = v0_mu + eps_v0*torch.exp(v0_logv) #N,q
+
+        #z0    = qz0_m + eps*torch.exp(qz0_logv) # N,2q
+        logp0 = self.mvn.log_prob(eps_s0) + self.mvn.log_prob(eps_v0) # N 
+
+        ######## ODE ###########
+        z0 = torch.concat([v0,s0],dim=1)
         t  = dt * torch.arange(T,dtype=torch.float).to(z0.device)
         ztL   = []
         logpL = []
@@ -169,8 +147,8 @@ class ODEGPVAE(nn.Module):
         ztL   = torch.cat(ztL,0) # L,N,T,2q
         logpL = torch.cat(logpL) # L,N,T
         
-        # decode
-        st_muL = ztL[:,:,:,q:] # L,N,T,q
+        ######## decode ######### 
+        st_muL = ztL[:,:,:,q:] # L,N,T,q Only the position is decoded
         s = self.fc3(st_muL.contiguous().view([L*N*T,q]) ) # L*N*T,h_dim
         Xrec = self.decoder(s) # L*N*T,nc,d,d
         Xrec = Xrec.view([L,N,T,nc,d,d]) # L,N,T,nc,d,d

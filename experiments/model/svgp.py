@@ -171,7 +171,7 @@ class SVGP(ApproximateGP):
         '''
         return self(x).rsample(torch.Size([P]))
 
-    def ode_rhs(self, t,vs_logp,f):
+    def ode_rhs(self, t, vs_logp,f):
         vs, logp = vs_logp
         q = vs.shape[1]//2
         dv = f(vs) # N,q 

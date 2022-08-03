@@ -72,7 +72,7 @@ class GPODE(nn.Module):
         gp_draw = self.svgp.draw_posterior_function() #draw a differential function from GP
        # odef = lambda t,x: gp_draw(x)
         oderhs = lambda t, x: self.svgp.ode_rhs(t,x,gp_draw) # make the ODE forward function 
-        zt, logp = odeint(oderhs, (z0, logp0), ts,method="rk4") # T,N,2q & T,N
+        zt, logp = odeint(oderhs, (z0, logp0), ts, method="euler") # T,N,2q & T,N
         # integrate(odef, x0, ts)
         return zt, logp
         
