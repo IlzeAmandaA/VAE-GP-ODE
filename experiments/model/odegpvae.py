@@ -10,7 +10,7 @@ from .vae import Encoder, Decoder
 
 # model implementation
 class ODEGPVAE(nn.Module):
-    def __init__(self, n_filt=8, q=8, device="cpu", v_steps=10):
+    def __init__(self, n_filt=8, q=8, device="cuda", v_steps=10):
         super(ODEGPVAE, self).__init__()
         
         #number of data points from time 0 used in encoding velocity
@@ -26,36 +26,25 @@ class ODEGPVAE(nn.Module):
         self.fc3 = nn.Linear(q, h_dim)
 
         # differential function
-        self.ode_model = GPODE(2*q, q)
+        self.ode_model = GPODE(2*q, q, device=device)
 
         # decoder
         self.decoder = Decoder(n_filt=n_filt)
 
-        self._zero_mean = torch.zeros(q).to(device)
-        self._eye_covar = torch.eye(q).to(device) 
+        #prior distriobution p(Z)
+        self._zero_mean = torch.zeros(2*q).to(device)
+        self._eye_covar = torch.eye(2*q).to(device) 
         self.mvn = MultivariateNormal(self._zero_mean, self._eye_covar)
+
+        #lop0 dummy var
+        self.mvn_q = MultivariateNormal(torch.zeros(q).to(device),torch.eye(q).to(device))
 
         # downweighting the BNN KL term is helpful if self.bnn is heavily overparameterized
         self.beta = 1.0 # 2*q/self.bnn.kl().numel()
 
-    def ode2vae_rhs(self,t,vs_logp,f):
-        vs, logp = vs_logp # N,2q & N
-        q = vs.shape[1]//2
-        dv = f(vs) # N,q 
-        ds = vs[:,:q]  # N,q
-        dvs = torch.cat([dv,ds],1) # N,2q
-        ddvi_dvi = torch.stack(
-                    [torch.autograd.grad(dv[:,i],vs,torch.ones_like(dv[:,i]),
-                    retain_graph=True,create_graph=True)[0].contiguous()[:,i]
-                    for i in range(q)],1) # N,q --> df(x)_i/dx_i, i=1..q
-        tr_ddvi_dvi = torch.sum(ddvi_dvi,1) # N
-        return (dvs,-tr_ddvi_dvi)
-
-
-    def elbo(self, qz_m, qz_logv, zode_L, logpL, X, XrecL, Ndata, qz_enc_m=None, qz_enc_logv=None):
+    def elbo(self, q, zode_L, logpL, X, XrecL, Ndata, qz_enc_m=None, qz_enc_logv=None):
         ''' Input:
-                qz_m        - latent means [N,2q]
-                qz_logv     - latent logvars [N,2q]
+                q           - latent shape  [q]
                 zode_L      - latent trajectory samples [L,N,T,2q]
                 logpL       - densities of latent trajectory samples [L,N,T]
                 X           - input images [N,T,nc,d,d]
@@ -71,18 +60,22 @@ class ODEGPVAE(nn.Module):
         '''
         [N,T,nc,d,d] = X.shape
         L = zode_L.shape[0]
-        q = qz_m.shape[1]//2
-        # prior
+
+        # prior p(Z), MUltivariate Gaussian
         log_pzt = self.mvn.log_prob(zode_L.contiguous().view([L*N*T,2*q])) # L*N*T
         log_pzt = log_pzt.view([L,N,T]) # L,N,T
-        kl_zt   = logpL - log_pzt  # L,N,T
-        kl_z    = kl_zt.sum(2).mean(0) # N
-        kl_w    = self.ode_model.loss(X,XrecL, Ndata)
 
-        # reconstruction likelihood (?) #TODO ask about this 
+        #KL inducing loss, GP 
+        kl_u    = self.ode_model.kl_inducing
+
+        # reconstruction likelihood log p(X|Z), Bernoulli dist 
         XL = X.repeat([L,1,1,1,1,1]) # L,N,T,nc,d,d 
         lhood_L = torch.log(1e-3+XrecL)*XL + torch.log(1e-3+1-XrecL)*(1-XL) # L,N,T,nc,d,d
         lhood = lhood_L.sum([2,3,4,5]).mean(0) # N
+
+        # kl_zt := KL[q(Z|X,f)||p(Z)]
+        kl_zt   = logpL - log_pzt  # L,N,T
+        kl_z    = kl_zt.sum(2).mean(0) # N
 
         if qz_enc_m is not None: # instant encoding
             qz_enc_mL    = qz_enc_m.repeat([L,1])  # L*N*T,2*q
@@ -93,10 +86,10 @@ class ODEGPVAE(nn.Module):
             qenc_zt_ode = qenc_zt_ode.sum([3]) # L,N,T
             inst_enc_KL = logpL - qenc_zt_ode
             inst_enc_KL = inst_enc_KL.sum(2).mean(0) # N
-            return Ndata*lhood.mean(), Ndata*kl_z.mean(), kl_w, Ndata*inst_enc_KL.mean()
+            return Ndata*lhood.mean(), Ndata*kl_z.mean(), kl_u, Ndata*inst_enc_KL.mean()
         else:
 
-            return Ndata*lhood.mean(), Ndata*kl_z.mean(), kl_w
+            return Ndata*lhood.mean(), Ndata*kl_z.mean(), kl_u
 
     def forward(self, X, Ndata, L=1, inst_enc=False, method='dopri5', dt=0.1):
         ''' Input
@@ -117,11 +110,9 @@ class ODEGPVAE(nn.Module):
         '''
         ######## encode ###########
         [N,T,nc,d,d] = X.shape
-        #h = self.encoder(X[:,0]) #pass initial state through the encoder
         s0_mu, s0_logv = self.enc_s(X[:,0])
-        v0_mu, v0_logv = self.enc_v(X[:,0:self.v_steps])
+        v0_mu, v0_logv = self.enc_v(torch.squeeze(X[:,0:self.v_steps]))
         
-
         q = s0_mu.shape[1]
 
         # latent samples
@@ -131,7 +122,8 @@ class ODEGPVAE(nn.Module):
         v0 = v0_mu + eps_v0*torch.exp(v0_logv) #N,q
 
         #z0    = qz0_m + eps*torch.exp(qz0_logv) # N,2q
-        logp0 = self.mvn.log_prob(eps_s0) + self.mvn.log_prob(eps_v0) # N 
+        # TODO ask: in principle, this a dummy variable, right?
+        logp0 = self.mvn_q.log_prob(eps_s0) + self.mvn_q.log_prob(eps_v0) # N 
 
         ######## ODE ###########
         z0 = torch.concat([v0,s0],dim=1)
@@ -140,11 +132,11 @@ class ODEGPVAE(nn.Module):
         logpL = []
         # sample L trajectories
         for l in range(L):
-            zt,logp = self.ode_model.forward_trajectory(z0, logp0, t) # T,N,2q & T,N
+            zt,logp = self.ode_model(z0, logp0, t, method) # T,N,2q & T,N
             ztL.append(zt.permute([1,0,2]).unsqueeze(0)) # 1,N,T,2q
             logpL.append(logp.permute([1,0]).unsqueeze(0)) # 1,N,T
 
-        ztL   = torch.cat(ztL,0) # L,N,T,2q
+        ztL   = torch.cat(ztL,0) # L,N,T,2q 1x25x16x16
         logpL = torch.cat(logpL) # L,N,T
         
         ######## decode ######### 
@@ -159,39 +151,32 @@ class ODEGPVAE(nn.Module):
             h = self.encoder(X.contiguous().view([N*T,nc,d,d]))
             qz_enc_m, qz_enc_logv = self.fc1(h), self.fc2(h) # N*T,2q & N*T,2q
             lhood, kl_z, kl_w, inst_KL = \
-                self.elbo(qz0_m, qz0_logv, ztL, logpL, X, Xrec, Ndata, qz_enc_m, qz_enc_logv)
+                self.elbo(q, ztL, logpL, X, Xrec, Ndata, qz_enc_m, qz_enc_logv)
             elbo = lhood - kl_z - inst_KL - self.beta*kl_w
 
         else:
-            '''
-            lhood - vae
-            kl_z - prior on ODE trajcetories
-            kl_w - prior on BNN weights
-            '''
-            lhood, kl_z, kl_w = self.elbo(qz0_m, qz0_logv, ztL, logpL, X, Xrec, Ndata) # TODO check loss term for GP-ODE (might have to adjust the loss here)
-            elbo = lhood - kl_z - self.beta*kl_w
+            lhood, kl_z, kl_w = self.elbo(q, ztL, logpL, X, Xrec, Ndata) # TODO check loss term for GP-ODE (might have to adjust the loss here)
+            elbo = lhood - kl_z - self.beta*kl_w 
 
 
-        return Xrec, qz0_m, qz0_logv, ztL, elbo, lhood, kl_z, self.beta*kl_w
+        return Xrec, (s0_mu, s0_logv), (v0_mu, v0_logv), ztL, elbo, lhood, kl_z, self.beta*kl_w
 
     def mean_rec(self, X, method='dopri5', dt=0.1):
         [N,T,nc,d,d] = X.shape
-        # encode
-        h = self.encoder(X[:,0])
-        qz0_m = self.fc1(h) # N,2q
-        q = qz0_m.shape[1]//2
-        # ode
-        def ode2vae_mean_rhs(t,vs,f):
-            q = vs.shape[1]//2
-            dv = f(vs) # N,q 
-            ds = vs[:,:q]  # N,q
-            return torch.cat([dv,ds],1) # N,2q
-        f     = self.bnn.draw_f(mean=True) # use the mean differential function
-        odef  = lambda t,vs: ode2vae_mean_rhs(t,vs,f) # make the ODE forward function
-        t     = dt * torch.arange(T,dtype=torch.float).to(qz0_m.device)
-        zt_mu = odeint(odef,qz0_m,t,method=method).permute([1,0,2]) # N,T,2q
+        ######## encode ###########
+        [N,T,nc,d,d] = X.shape
+        s0_mu, s0_logv = self.enc_s(X[:,0])
+        v0_mu, v0_logv = self.enc_v(torch.squeeze(X[:,0:self.v_steps]))
+
+        q = s0_mu.shape[1]
+
+        ######## ODE ###########
+        z0 = torch.concat([v0_mu,s0_mu],dim=1)
+        t  = dt * torch.arange(T,dtype=torch.float).to(z0.device)
+        zt = self.ode_model.sample(z0, t, method).permute([1,0,2])  # N,T,2q
+
         # decode
-        st_mu = zt_mu[:,:,q:] # N,T,q
+        st_mu = zt[:,:,q:] # N,T,q
         s = self.fc3(st_mu.contiguous().view([N*T,q]) ) # N*T,q
         Xrec_mu = self.decoder(s) # N*T,nc,d,d
         Xrec_mu = Xrec_mu.view([N,T,nc,d,d]) # N,T,nc,d,d

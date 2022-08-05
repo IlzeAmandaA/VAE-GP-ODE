@@ -26,12 +26,12 @@ class ELBO(nn.Module):
         '''
         return self.softplus(self.raw_sn).diag()
     
-    def forward(self, Y, Yhat, N):
-        mvn   = torch.distributions.MultivariateNormal(Y,self.signal_noise) # T,N
-        lhood = mvn.log_prob(Yhat).sum(0) # shape is Y.shape[0] 
-        lhood = lhood.mean() * N
+    def forward(self): #Y, Yhat, N
+        # mvn   = torch.distributions.MultivariateNormal(Y,self.signal_noise) # T,N
+        # lhood = mvn.log_prob(Yhat).sum(0) # shape is Y.shape[0] 
+        # lhood = lhood.mean() * N
         kl    = self.kl_func()
-        return -lhood + kl
+        return kl #-lhood + kl
 
 
 class GPODE(nn.Module):
@@ -39,7 +39,7 @@ class GPODE(nn.Module):
     Implements a black-box ODE model based on sparse Gaussian processes.
     """
     
-    def __init__(self, nin, nout, M=50, kernel='rbf', var_appr='diag'):
+    def __init__(self, nin, nout, M=50, kernel='rbf', var_appr='diag', device='cuda'):
         '''
         Initiates the system.
 
@@ -65,14 +65,24 @@ class GPODE(nn.Module):
         '''
         super().__init__()
         Z = torch.randn([M,nin])
-        self.svgp  = SVGP(Z, nout, kernel=kernel, u_var=var_appr)
-        self.loss = ELBO(self.svgp)
+        self.svgp  = SVGP(Z, nout, kernel=kernel, u_var=var_appr).to(device=device)
+       # self.kl_inducing = ELBO(self.svgp)
+        self.kl_inducing = self.svgp.kl()
 
-    def forward_trajectory(self, z0, logp0, ts):
+    def forward(self, z0, logp0, ts, method):
         gp_draw = self.svgp.draw_posterior_function() #draw a differential function from GP
-       # odef = lambda t,x: gp_draw(x)
         oderhs = lambda t, x: self.svgp.ode_rhs(t,x,gp_draw) # make the ODE forward function 
-        zt, logp = odeint(oderhs, (z0, logp0), ts, method="euler") # T,N,2q & T,N
-        # integrate(odef, x0, ts)
+        zt, logp = odeint(oderhs, (z0, logp0), ts, method=method) # T,N,2q & T,N
         return zt, logp
+
+    def sample(self, z0, ts, method):
+        gp_draw = self.svgp.draw_posterior_function() #draw a differential function from GP TODO he uses mean function
+        oderhs = lambda t, x: self.svgp.ode_rhs_sample(t,x,gp_draw) # make the ODE forward function 
+        zt = odeint(oderhs,z0,ts,method=method).permute([1,0,2]) # N,T,2q
+        return zt
+
+
+    @property
+    def device(self):
+        return next(self.parameters()).device
         

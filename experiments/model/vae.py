@@ -30,10 +30,14 @@ class Encoder(nn.Module):
         z0_mu, z0_log_sig_sq = self.fc1(h), self.fc2(h) # N,q & N,q
         return z0_mu, z0_log_sig_sq
 
+    @property
+    def device(self):
+        return next(self.parameters()).device
+
 
 class Decoder(nn.Module):
     def __init__(self, n_filt=8):
-        super(Encoder, self).__init__()
+        super(Decoder, self).__init__()
 
         h_dim = n_filt*4**3 # encoder output is [4*n_filt,4,4]
 
@@ -55,3 +59,7 @@ class Decoder(nn.Module):
     def forward(self, x):
         h = self.decnn(x)
         return h #z0_mu, z0_log_sig_sq
+    
+    @property
+    def device(self):
+        return next(self.parameters()).device

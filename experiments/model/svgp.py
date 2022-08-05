@@ -34,10 +34,11 @@ class SVGP(ApproximateGP):
             VAR_CLS = UnwhitenedVariationalStrategy
         
         # create the object
-        variational_distribution = U_VAR_DIST(inducing_points.size(-2), batch_shape=torch.Size([nout]))
+        variational_distribution = U_VAR_DIST(inducing_points.size(-2), batch_shape=torch.Size([nout])) #define q(u)
         base_variational_strategy = VAR_CLS(self, inducing_points, variational_distribution, learn_inducing_locations=True)
-        variational_strategy = IndependentMultitaskVariationalStrategy(base_variational_strategy, num_tasks=nout)
+        variational_strategy = IndependentMultitaskVariationalStrategy(base_variational_strategy, num_tasks=nout) #define how to compute q(f) from q(u), batch of GP
         super().__init__(variational_strategy)
+
         self.kernel   = kernel
         self.whitened = whitened
         self.u_var = u_var
@@ -182,10 +183,16 @@ class SVGP(ApproximateGP):
                     retain_graph=True,create_graph=True)[0].contiguous()[:,i]
                     for i in range(q)],1) # N,q --> df(x)_i/dx_i, i=1..q
         tr_ddvi_dvi = torch.sum(ddvi_dvi,1) # N
-        return (dvs,-tr_ddvi_dvi)        
+        return (dvs,-tr_ddvi_dvi)
+
+    def ode_rhs_sample(self, t, vs, f):
+        q = vs.shape[1]//2
+        dv = f(vs) # N,q 
+        ds = vs[:,:q]  # N,q
+        return torch.cat([dv,ds],1) # N,2q    
 
            
-    def draw_posterior_function(self, S=100, P=1): #TODO adjust f(x) for 2 inputs (i think)  CHECK
+    def draw_posterior_function(self, S=100, P=1): 
         ''' 
             Sampling with Matheron's rule
             S - number of bases
