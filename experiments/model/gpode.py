@@ -69,8 +69,8 @@ class GPODE(nn.Module):
        # self.kl_inducing = ELBO(self.svgp)
         self.kl_inducing = self.svgp.kl()
 
-    def forward(self, z0, logp0, ts, method):
-        gp_draw = self.svgp.draw_posterior_function() #draw a differential function from GP
+    def forward(self, z0, logp0, ts, method): 
+        gp_draw = self.svgp.draw_posterior_function() #draw a differential function from GP #TODO corresponds to DSVGP forwards pass 
         oderhs = lambda t, x: self.svgp.ode_rhs(t,x,gp_draw) # make the ODE forward function 
         zt, logp = odeint(oderhs, (z0, logp0), ts, method=method) # T,N,2q & T,N
         return zt, logp
