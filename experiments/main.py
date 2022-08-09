@@ -69,13 +69,16 @@ parser.add_argument('--lr', type=float, default=0.005,
                     help="Learning rate for model training")
 parser.add_argument('--eval_sample_size', type=int, default=128,
                     help="Number of posterior samples to evaluate the model predictive performance")
-
 parser.add_argument('--save', type=str, default='results/mnist',
                     help="Directory name for saving all the model outputs")
 parser.add_argument('--seed', type=int, default=121,
                     help="Global seed for the training run")
 parser.add_argument('--log_freq', type=int, default=20,
                     help="Logging frequency while training")
+parser.add_argument('--device', type=str, default='cpu',
+                    help="device")
+
+                
 
 if __name__ == '__main__':
     args = parser.parse_args()
@@ -88,6 +91,10 @@ if __name__ == '__main__':
 
     ########## set global random seed ###########
     seed_everything(args.seed)
+
+    ########### device #######
+    args.device = device.type
+    print('Running model on ', args.device)
 
     ########### data ############ 
     trainset, testset = load_data(args, plot=True)
