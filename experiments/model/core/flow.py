@@ -95,7 +95,7 @@ class Flow(nn.Module):
         elif sample:
             zt, _ = odeint(
                 self.odefunc,
-                z0,
+                (z0,logp0),
                 ts,
                 atol=self.atol,
                 rtol=self.rtol,
