@@ -111,7 +111,7 @@ class DSVGP_Layer(torch.nn.Module):
         # compute th term nu = k(Z,Z)^{-1}(u-f(Z)) in whitened form of inducing variables
         # equation (13) from http://proceedings.mlr.press/v119/wilson20a/wilson20a.pdf
         Ku = self.kern.K(self.inducing_loc())  # (M,M) or (D,M,M)
-        Lu = torch.cholesky(Ku + torch.eye(self.M) * jitter)  # (M,M) or (D,M,M)
+        Lu = torch.cholesky(Ku + torch.eye(self.M).to(self.device) * jitter)  # (M,M) or (D,M,M)
         u_prior = self.rff_forward(self.inducing_loc())  # (M,D)
 
         if not self.dimwise:
