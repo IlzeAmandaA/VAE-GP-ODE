@@ -1,8 +1,11 @@
+import torch
+from torch.distributions import MultivariateNormal 
 from model.core.dsvpy import DSVGP_Layer
 from model.core.flow import Flow
 from model.core.distributions import Bernoulli, Gaussian
 from model.core.vae import Encoder, Decoder
 from model.core.odegpvae import ODEGPVAE
+
 
 
 def build_model(args):
@@ -25,10 +28,12 @@ def build_model(args):
     likelihood = Bernoulli() #2q
 
     #prior distriobution p(Z)
-    prior = Gaussian(ndim=args.q*2) #2q
+   # prior = Gaussian(ndim=args.q*2) #2q
+    prior = MultivariateNormal(torch.zeros(args.q*2),torch.eye(args.q*2)) 
 
     #dummy prior for q_ode
-    prior_q = Gaussian(ndim=args.q) #q
+    prior_q =  MultivariateNormal(torch.zeros(args.q),torch.eye(args.q)) 
+    #prior_q = Gaussian(ndim=args.q) #q
 
     # encoder position
     encoder_s = Encoder(steps= 1, n_filt=args.n_filt, q=args.q)
@@ -43,12 +48,13 @@ def build_model(args):
                         enc_s = encoder_s,
                         enc_v = encoder_v,
                         decoder = decoder,
-                        num_observations=N * T * D, #TODO 
+                        num_observations= args.batch * args.T, #TODO N*T*D
                         likelihood=likelihood,
                         prior = prior,
                         prior_q= prior_q,
                         ts_dense_scale=args.ts_dense_scale,
-                        beta=args.beta)
+                        beta=args.beta,
+                        steps=args.steps)
 
     return odegpvae
 

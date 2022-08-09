@@ -1,14 +1,13 @@
-import numpy as np 
-import torch
 import os 
 import argparse
+import torch
 from data.wrappers import load_data
 from model.create_model import build_model, compute_loss
 from model.misc.plot_utils import plot_rot_mnist
 from model.misc import io_utils
-from model.misc.torch_utils import torch2numpy, save_model_optimizer, seed_everything
+from model.misc.torch_utils import seed_everything
 from model.misc.settings import settings
-from.model.core.initialization import initialize_and_fix_kernel_parameters
+from model.core.initialization import initialize_and_fix_kernel_parameters
 
 device = settings.device
 if device.type == 'cuda':
@@ -40,10 +39,18 @@ parser.add_argument('--value', type=int, default=3,
                     help="training choice")
 parser.add_argument('--data_seqlen', type=int, default=100,
                     help="Training sequence length")
+parser.add_argument('--batch', type=int, default=25,
+                    help="batch size")
+parser.add_argument('--T', type=int, default=16,
+                    help="Number of time points")
 
 #vae arguments
 parser.add_argument('--q', type=int, default=8,
                     help="Latent space dimensionality")
+parser.add_argument('--n_filt', type=int, default=8,
+                    help="Number of filters in the cnn")
+parser.add_argument('--steps', type=int, default=5,
+                    help="Number of timesteps used for encoding velocity")
 
 # ode solver arguments
 parser.add_argument('--solver', type=str, default='euler', choices=SOLVERS,
@@ -52,6 +59,8 @@ parser.add_argument('--ts_dense_scale', type=int, default=2,
                     help="Factor for making a dense integration time grid (useful for explicit solvers)")
 parser.add_argument('--use_adjoint', type=eval, default=False,
                     help="Use adjoint method for gradient computation")
+parser.add_argument('--beta', type=int, default=1,
+                    help="Factor to scale the inducing KL loss effect")
 
 # training arguments
 parser.add_argument('--Nepoch', type=int, default=500, #10_000
@@ -74,13 +83,14 @@ if __name__ == '__main__':
     ######### setup output directory and logger ###########
     args.save = os.path.join(os.path.abspath(os.path.dirname(__file__)), args.save, '')
     io_utils.makedirs(args.save)
+    io_utils.makedirs(os.path.join(args.save, 'plots'))
     logger = io_utils.get_logger(logpath=os.path.join(args.save, 'logs'))
 
     ########## set global random seed ###########
     seed_everything(args.seed)
 
     ########### data ############ 
-    trainset, testset = load_data(args.data_root, args.task, args.mask, args.value, plot=True)
+    trainset, testset = load_data(args, plot=True)
 
     ########### model ###########
     odegpvae = build_model(args)
@@ -92,7 +102,7 @@ if __name__ == '__main__':
     #init initial dist x0 (?)
 
     # ########### train ###########
-    optimizer = torch.optim.Adam(odegpvae.parameters(),lr=args.lor)
+    optimizer = torch.optim.Adam(odegpvae.parameters(),lr=args.lr)
 
     for ep in range(args.Nepoch):
         L = 1 if ep<args.Nepoch//2 else 5 # increasing L as optimization proceeds is a good practice

@@ -135,7 +135,7 @@ class DSVGP_Layer(torch.nn.Module):
         f = torch.einsum('nfk,fk->nk' if self.dimwise else 'nf,fd->nd', phi, self.rff_weights)  # (N,D_out)
         return f  # (N,D_out)
 
-    def forward(self, t, x):
+    def forward(self, x):
         """
         Compute sample from the SVGP posterior using decoupeld sampling approach
         Involves two steps:

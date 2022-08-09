@@ -9,22 +9,22 @@ from .utils import Dataset
 
 
 
-def load_mnist_data(data_dir,dt=0.1, mask= True, value = 3, plot=True):
-	fullname = os.path.join(data_dir, "rot_mnist", "rot-mnist.mat")
+def load_mnist_data(args, plot=True):
+	fullname = os.path.join(args.data_root, "rot_mnist", "rot-mnist.mat")
 	dataset = sio.loadmat(fullname)
 	
 	X = np.squeeze(dataset['X'])
-	if mask:
+	if args.mask:
 		Y = np.squeeze(dataset['Y'])
-		X = X[Y==value,:,:]
+		X = X[Y==args.value,:,:]
 
 	N = 500
-	T = 16
+	T = args.T #16
 	Xtr   = torch.tensor(X[:N],dtype=torch.float32).view([N,T,1,28,28])
 	Xtest = torch.tensor(X[N:],dtype=torch.float32).view([-1,T,1,28,28])
 
 	# Generators
-	params = {'batch_size': 25, 'shuffle': True, 'num_workers': 2}
+	params = {'batch_size': args.batch, 'shuffle': True, 'num_workers': 2} #25
 	trainset = Dataset(Xtr)
 	trainset = data.DataLoader(trainset, **params)
 	testset  = Dataset(Xtest)
@@ -38,7 +38,7 @@ def load_mnist_data(data_dir,dt=0.1, mask= True, value = 3, plot=True):
 				plt.subplot(7,20,j*20+i+1)
 				plt.imshow(np.reshape(x[j,i,:],[28,28]), cmap='gray');
 				plt.xticks([]); plt.yticks([])
-		plt.savefig('plots/mnist/data.png')
+		plt.savefig(os.path.join(args.save, 'plots/data.png'))
 		plt.close()
 	return trainset, testset
 

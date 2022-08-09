@@ -36,12 +36,12 @@ class ODEfunc(nn.Module):
             return (dy, divergence)
         elif self.sample:
             q = vs.shape[1]//2
-            dv = self.diffeq(t, vs) # N,q
+            dv = self.diffeq(vs) # N,q
             ds = vs[:,:q]  # N,q
             return (torch.cat([dv,ds],1), None) # N,2q    
         else:
             q = vs.shape[1]//2
-            dv = self.diffeq(t, vs) #output of df/dv 
+            dv = self.diffeq(vs) # 25,8
             ds = vs[:,:q]  # N,q
             dvs = torch.cat([dv,ds],1) # N,2q
             ddvi_dvi = torch.stack(
@@ -49,7 +49,7 @@ class ODEfunc(nn.Module):
                         retain_graph=True,create_graph=True)[0].contiguous()[:,i]
                         for i in range(q)],1) # N,q --> df(x)_i/dx_i, i=1..q
             tr_ddvi_dvi = torch.sum(ddvi_dvi,1) # N
-            return (dvs,-tr_ddvi_dvi)
+            return (dvs, -tr_ddvi_dvi)
 
 
 class Flow(nn.Module):
@@ -103,9 +103,6 @@ class Flow(nn.Module):
             )
             return zt.permute([1,0,2]), _
         else:
-            #here of my odeint I need as output the following:
-            #zt, logp = 
-            #hence need to change my self.odefunc 
             zt, logp = odeint(
                 self.odefunc,
                 (z0, logp0),

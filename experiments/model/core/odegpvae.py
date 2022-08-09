@@ -1,10 +1,11 @@
+from pipes import quote
 import torch
 import torch.nn as nn
 
 
 # model implementation
 class ODEGPVAE(nn.Module):
-    def __init__(self, flow, enc_s, enc_v, decoder, num_observations, likelihood, prior, prior_q, ts_dense_scale=1, beta=1, dt=0.1):
+    def __init__(self, flow, enc_s, enc_v, decoder, num_observations, likelihood, prior, prior_q, steps, ts_dense_scale=1, beta=1, dt=0.1):
         super(ODEGPVAE, self).__init__()
 
         self.flow = flow #Dynamics 
@@ -15,9 +16,10 @@ class ODEGPVAE(nn.Module):
         self.enc_v = enc_v
         self.decoder = decoder
         self.prior = prior
-        self.prrior_q = prior_q
+        self.prior_q = prior_q
         self.beta = beta
         self.dt = dt
+        self.v_steps = steps
 
     def build_encoding(self, X):
         s0_mu, s0_logv = self.enc_s(X[:,0])
@@ -32,11 +34,9 @@ class ODEGPVAE(nn.Module):
         z0 = torch.concat([v0,s0],dim=1)
         return z0, logp0
 
-    def build_decoding(self, ztL, dims):
-        q,L,N,T,nc,d,d = dims
-        st_muL = ztL[:,:,:,q:] # L,N,T,q Only the position is decoded
-        s = self.fc3(st_muL.contiguous().view([L*N*T,q]) ) # L*N*T,h_dim
-        Xrec = self.decoder(s) # L*N*T,nc,d,d
+    def build_decoding(self, st_muL, dims):
+        L,N,T,nc,d,d = dims
+        Xrec = self.decoder(st_muL) # L*N*T,nc,d,d
         Xrec = Xrec.view([L,N,T,nc,d,d]) # L,N,T,nc,d,d
         return Xrec
 
@@ -72,7 +72,7 @@ class ODEGPVAE(nn.Module):
         """
         [N,T,nc,d,d] = X.shape
         #encode
-        z0, logp0 = self.build_encoding(X) #N,2q 
+        z0, logp0 = self.build_encoding(X) #N,2q & N,q (25,16) (25,8)
         q = z0.shape[1]//2
         ztL = []
         logpL = []
@@ -85,7 +85,7 @@ class ODEGPVAE(nn.Module):
         logpL = torch.cat(logpL) # L,N,T    
         #decode
         st_muL = ztL[:,:,:,q:] # L,N,T,q Only the position is decoded
-        Xrec = self.build_decoding(st_muL, (q,L,N,T,nc,d,d))
+        Xrec = self.build_decoding(st_muL, (L,N,T,nc,d,d))
 
         ##### compute loss terms ######
         #log p(z)

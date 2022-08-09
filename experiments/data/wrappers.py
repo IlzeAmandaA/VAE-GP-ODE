@@ -5,9 +5,10 @@ from .mnist import load_mnist_data
 # from .bballs import *
 
 
-def load_data(data_dir,task,dt=0.1,mask=True, value = 3,subject_id=0,plot=False):
-	if task=='mnist':
-		trainset, testset = load_mnist_data(data_dir,dt=dt,mask= mask, value = value,plot=plot)
+def load_data(args, plot=False):
+	if args.task=='mnist':
+		trainset, testset = load_mnist_data(args, plot = plot)
+		
 	# if task=='mnist_nonuniform':
 	# 	dataset = load_mnist_nonuniform_data(data_dir,dt=dt,plot=plot)
 	# elif task=='mocap_many':

@@ -1,4 +1,4 @@
-from src.misc.constraint_utils import softplus, invsoftplus
+from model.misc.constraint_utils import softplus, invsoftplus
 
 import torch
 import torch.nn as nn

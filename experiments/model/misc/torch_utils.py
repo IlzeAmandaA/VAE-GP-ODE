@@ -1,4 +1,4 @@
-from src.misc.settings import settings
+from model.misc.settings import settings
 
 import torch.nn as nn
 import random, os
