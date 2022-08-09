@@ -38,7 +38,7 @@ class ODEfunc(nn.Module):
             q = vs.shape[1]//2
             dv = self.diffeq(vs) # N,q
             ds = vs[:,:q]  # N,q
-            return (torch.cat([dv,ds],1), None) # N,2q    
+            return (torch.cat([dv,ds],1), logp) # N,2q    
         else:
             q = vs.shape[1]//2
             dv = self.diffeq(vs) # 25,8
