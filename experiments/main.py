@@ -126,7 +126,7 @@ if __name__ == '__main__':
             for test_batch in testset:
                 test_batch = test_batch.to(device)
                 Xrec_mu, test_mse = odegpvae(test_batch)
-                plot_rot_mnist(test_batch, Xrec_mu, False, fname='rot_mnist.png')
+                plot_rot_mnist(test_batch, Xrec_mu.squeeze(0), False, fname='rot_mnist.png')
                 torch.save(odegpvae.state_dict(), os.path.join(args.save, 'odegpvae_mnist.pth'))
                 break
 
