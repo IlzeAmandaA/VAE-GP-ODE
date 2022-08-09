@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import numpy as np
 
 # plotting
 def plot_rot_mnist(X, Xrec, show=False, fname='rot_mnist.png'):
