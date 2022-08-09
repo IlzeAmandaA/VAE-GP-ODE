@@ -5,9 +5,7 @@ import numpy as np
 def plot_rot_mnist(X, Xrec, show=False, fname='rot_mnist.png'):
     N = min(X.shape[0],10)
     Xnp = X.detach().cpu().numpy()
-    print('x shape', Xnp.shape)
     Xrecnp = Xrec.detach().cpu().numpy()
-    print('xrec shape', Xrecnp.shape)
     T = X.shape[1]
     plt.figure(2,(T,3*N))
     for i in range(N):
