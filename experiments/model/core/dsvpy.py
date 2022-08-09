@@ -42,7 +42,7 @@ class DSVGP_Layer(torch.nn.Module):
                      }
     """
 
-    def __init__(self, D_in, D_out, M, S, q_diag=False, dimwise=True):
+    def __init__(self, D_in, D_out, M, S, q_diag=False, dimwise=True, device='cpu'):
         """
         @param D_in: Number of input dimensions
         @param D_out: Number of output dimensions
@@ -53,7 +53,7 @@ class DSVGP_Layer(torch.nn.Module):
         """
         super(DSVGP_Layer, self).__init__()
 
-        self.kern = RBF(D_in, D_out, dimwise)
+        self.kern = RBF(D_in, D_out, dimwise).to(device)
         self.q_diag = q_diag
         self.dimwise = dimwise
 

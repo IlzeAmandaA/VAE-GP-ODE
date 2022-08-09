@@ -20,9 +20,10 @@ def build_model(args):
                      M=args.num_inducing,
                      S=args.num_features,
                      dimwise=args.dimwise,
-                     q_diag=args.q_diag).to(args.device)
+                     q_diag=args.q_diag,
+                     device=args.device)
 
-    flow = Flow(diffeq=gp, solver=args.solver, use_adjoint=args.use_adjoint).to(args.device)
+    flow = Flow(diffeq=gp, solver=args.solver, use_adjoint=args.use_adjoint)
 
     #likelihood = Gaussian(ndim=D) #2q
     likelihood = Bernoulli() #2q
