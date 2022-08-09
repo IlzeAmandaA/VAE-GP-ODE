@@ -1,0 +1,7 @@
+*.mat
+data/mocap/
+data/rot_mnist/
+data/__pycache__/
+model/__pycache__/
+**/__pycache__/
+**/.DS_Store

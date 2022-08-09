@@ -3,7 +3,7 @@ import torch.nn as nn
 from torch.distributions import MultivariateNormal, Normal
 from torchdiffeq import odeint
 
-from .utils import *
+from model.misc.torch_utils import Flatten, UnFlatten
 
 class Encoder(nn.Module):
     def __init__(self, steps = 1, n_filt=8, q=8):
@@ -36,10 +36,11 @@ class Encoder(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, n_filt=8):
+    def __init__(self, n_filt=8, q=8):
         super(Decoder, self).__init__()
 
         h_dim = n_filt*4**3 # encoder output is [4*n_filt,4,4]
+        self.fc = nn.Linear(q, h_dim)
 
         self.decnn = nn.Sequential(
             UnFlatten(4),
@@ -57,7 +58,9 @@ class Decoder(nn.Module):
         )
 
     def forward(self, x):
-        h = self.decnn(x)
+        L,N,T,q = x.shape
+        s = self.fc(x.contiguous().view([L*N*T,q]) ) # N*T,q
+        h = self.decnn(s)
         return h #z0_mu, z0_log_sig_sq
     
     @property

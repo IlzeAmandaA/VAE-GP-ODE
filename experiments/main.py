@@ -1,67 +1,118 @@
 import numpy as np 
 import torch
+import os 
+import argparse
 from data.wrappers import load_data
-from model.odegpvae import ODEGPVAE
-import matplotlib.pyplot as plt
+from model.create_model import build_model, compute_loss
+from model.misc.plot_utils import plot_rot_mnist
+from model.misc import io_utils
+from model.misc.torch_utils import torch2numpy, save_model_optimizer, seed_everything
+from model.misc.settings import settings
+from.model.core.initialization import initialize_and_fix_kernel_parameters
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-print('Running on ', device)
-data_root = 'data/'
-task = 'mnist'
-mask = True
-value = 3 
+device = settings.device
+if device.type == 'cuda':
+    torch.set_default_tensor_type('torch.cuda.FloatTensor')
 
-# plotting
-def plot_rot_mnist(X, Xrec, show=False, fname='rot_mnist.png'):
-    N = min(X.shape[0],10)
-    Xnp = X.detach().cpu().numpy()
-    Xrecnp = Xrec.detach().cpu().numpy()
-    T = X.shape[1]
-    plt.figure(2,(T,3*N))
-    for i in range(N):
-        for t in range(T):
-            plt.subplot(2*N,T,i*T*2+t+1)
-            plt.imshow(np.reshape(Xnp[i,t],[28,28]), cmap='gray')
-            plt.xticks([]); plt.yticks([])
-        for t in range(T):
-            plt.subplot(2*N,T,i*T*2+t+T+1)
-            plt.imshow(np.reshape(Xrecnp[i,t],[28,28]), cmap='gray')
-            plt.xticks([]); plt.yticks([])
-    plt.savefig(fname)
-    if show is False:
-        plt.close()
+SOLVERS = ["dopri5", "bdf", "rk4", "midpoint", "adams", "explicit_adams", "fixed_adams"]
+parser = argparse.ArgumentParser('Learning human motion dynamics with GPODE')
+
+# model parameters
+parser.add_argument('--num_features', type=int, default=256,
+                    help="Number of Fourier basis functions (for pathwise sampling from GP)")
+parser.add_argument('--num_inducing', type=int, default=100,
+                    help="Number of inducing points for the sparse GP")
+parser.add_argument('--dimwise', type=eval, default=True,
+                    help="Specify separate lengthscales for every output dimension")
+parser.add_argument('--q_diag', type=eval, default=False,
+                    help="Diagonal posterior approximation for inducing variables")
+parser.add_argument('--num_latents', type=int, default=5,
+                    help="Number of latent dimensions for training")
+
+# data processing arguments
+parser.add_argument('--data_root', type=str, default='data/',
+                    help="Data location")
+parser.add_argument('--task', type=str, default='mnist',
+                    help="Experiment type")
+parser.add_argument('--mask', type=eval, default=True,
+                    help="select a subset of mnist data")
+parser.add_argument('--value', type=int, default=3,
+                    help="training choice")
+parser.add_argument('--data_seqlen', type=int, default=100,
+                    help="Training sequence length")
+
+#vae arguments
+parser.add_argument('--q', type=int, default=8,
+                    help="Latent space dimensionality")
+
+# ode solver arguments
+parser.add_argument('--solver', type=str, default='euler', choices=SOLVERS,
+                    help="ODE solver for numerical integration")
+parser.add_argument('--ts_dense_scale', type=int, default=2,
+                    help="Factor for making a dense integration time grid (useful for explicit solvers)")
+parser.add_argument('--use_adjoint', type=eval, default=False,
+                    help="Use adjoint method for gradient computation")
+
+# training arguments
+parser.add_argument('--Nepoch', type=int, default=500, #10_000
+                    help="Number of gradient steps for model training")
+parser.add_argument('--lr', type=float, default=0.005,
+                    help="Learning rate for model training")
+parser.add_argument('--eval_sample_size', type=int, default=128,
+                    help="Number of posterior samples to evaluate the model predictive performance")
+
+parser.add_argument('--save', type=str, default='results/mnist',
+                    help="Directory name for saving all the model outputs")
+parser.add_argument('--seed', type=int, default=121,
+                    help="Global seed for the training run")
+parser.add_argument('--log_freq', type=int, default=20,
+                    help="Logging frequency while training")
 
 if __name__ == '__main__':
-    ########### data ############ 
-    trainset, testset = load_data(data_root, task, mask, value, plot=True)
+    args = parser.parse_args()
 
+    ######### setup output directory and logger ###########
+    args.save = os.path.join(os.path.abspath(os.path.dirname(__file__)), args.save, '')
+    io_utils.makedirs(args.save)
+    logger = io_utils.get_logger(logpath=os.path.join(args.save, 'logs'))
+
+    ########## set global random seed ###########
+    seed_everything(args.seed)
+
+    ########### data ############ 
+    trainset, testset = load_data(args.data_root, args.task, args.mask, args.value, plot=True)
 
     ########### model ###########
-    odegpvae = ODEGPVAE(q=8,n_filt=16, device=device).to(device)
+    odegpvae = build_model(args)
 
+    ########### initialize model #######
+    #TODO how can we do this for the latent space? (can we do this even?)
+    odegpvae = initialize_and_fix_kernel_parameters(odegpvae, lengthscale_value=1.25, variance_value=0.5, fix=False)
+    #init of inducing variables (?) model = initialize_inducing(model, data_pca.trn.ys, data_pca.trn.ts.max(), 1e0)
+    #init initial dist x0 (?)
 
     # ########### train ###########
-    Nepoch = 500
-    optimizer = torch.optim.Adam(odegpvae.parameters(),lr=1e-3)
+    optimizer = torch.optim.Adam(odegpvae.parameters(),lr=args.lor)
 
-    for ep in range(Nepoch):
-        L = 1 if ep<Nepoch//2 else 5 # increasing L as optimization proceeds is a good practice
+    for ep in range(args.Nepoch):
+        L = 1 if ep<args.Nepoch//2 else 5 # increasing L as optimization proceeds is a good practice
         for i,local_batch in enumerate(trainset):
             minibatch = local_batch.to(device) # B x T x 1 x 28 x 28 (batch, time, image dim)
-            elbo, lhood, kl_z, kl_u = odegpvae(minibatch, len(trainset), L=L, inst_enc=False, method='euler')[4:]
-            tr_loss = -elbo
+            loss, lhood, kl_z, kl_u = compute_loss(odegpvae, minibatch, L)
             optimizer.zero_grad()
-            tr_loss.backward(retain_graph=True) #TODO had to add this (?)  
+            loss.backward() 
             optimizer.step()
             print('Iter:{:<2d} lhood:{:8.2f}  kl_z:{:<8.2f} kl_u:{:8.5f}'.\
                 format(i, lhood.item(), kl_z.item(), kl_u.item())) 
+
         with torch.set_grad_enabled(False):
             for test_batch in testset:
                 test_batch = test_batch.to(device)
-                Xrec_mu, test_mse = odegpvae.mean_rec(test_batch, method='euler')
+                Xrec_mu, test_mse = odegpvae(test_batch)
                 plot_rot_mnist(test_batch, Xrec_mu, False, fname='rot_mnist.png')
-                torch.save(odegpvae.state_dict(), 'odegpvae_mnist.pth')
+                torch.save(odegpvae.state_dict(), os.path.join(args.save, 'odegpvae_mnist.pth'))
                 break
-        print('Epoch:{:4d}/{:4d} tr_elbo:{:8.2f}  test_mse:{:5.3f}\n'.format(ep, Nepoch, tr_loss.item(), test_mse.item()))
+
+        print('Epoch:{:4d}/{:4d} tr_elbo:{:8.2f}  test_mse:{:5.3f}\n'.format(ep, args.Nepoch, loss.item(), test_mse.item()))
 
 
