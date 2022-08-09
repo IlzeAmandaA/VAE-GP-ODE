@@ -83,7 +83,7 @@ class DSVGP_Layer(torch.nn.Module):
         Generate a sample from the inducing posterior q(u) ~ N(m, S)
         @return: inducing sample (M,D) tensor
         """
-        epsilon = sample_normal(shape=(self.M, self.D_out), seed=None)  # (M, D_out)
+        epsilon = sample_normal(shape=(self.M, self.D_out), seed=None).to(self.device)  # (M, D_out)
         if self.q_diag:
             ZS = self.Us_sqrt() * epsilon  # (M, D_out)
         else:
@@ -100,10 +100,10 @@ class DSVGP_Layer(torch.nn.Module):
         3. Intermediate computations based on the inducing sample for pathwise update
         """
         # generate parameters required for the Fourier feature maps
-        self.rff_weights = sample_normal((self.S, self.D_out))  # (S,D_out)
+        self.rff_weights = sample_normal((self.S, self.D_out)).to(self.device)  # (S,D_out)
         self.rff_omega = self.kern.sample_freq(self.S, device=self.device)  # (D_in,S) or (D_in,S,D_out)
         phase_shape = (1, self.S, self.D_out) if self.dimwise else (1, self.S)
-        self.rff_phase = sample_uniform(phase_shape) * 2 * np.pi  # (S,D_out)
+        self.rff_phase = sample_uniform(phase_shape).to(self.device) * 2 * np.pi  # (S,D_out)
 
         # generate sample from the inducing posterior
         inducing_val = self.sample_inducing()  # (M,D)
