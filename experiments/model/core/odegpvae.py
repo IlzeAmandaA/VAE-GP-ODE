@@ -108,7 +108,7 @@ class ODEGPVAE(nn.Module):
         zt, _ = self.build_flow(z0, logp0, T, sample=True) # T,N,2q & None
         # decode
         st_mu = zt[:,:,q:] # N,T,q
-        Xrec_mu = self.build_decoding(st_mu,(q,1,N,T,nc,d,d)).view([N,T,nc,d,d]) # N,T,nc,d,d
+        Xrec_mu = self.build_decoding(st_mu,(1,N,T,nc,d,d)) # N,T,nc,d,d
         # error
         mse = torch.mean((Xrec_mu-X)**2)
         return Xrec_mu, mse
