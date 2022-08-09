@@ -26,9 +26,9 @@ def load_mnist_data(args, plot=True):
 	# Generators
 	params = {'batch_size': args.batch, 'shuffle': True, 'num_workers': 2} #25
 	trainset = Dataset(Xtr)
-	trainset = data.DataLoader(trainset, generator=torch.Generator(device=args.device), **params)
+	trainset = data.DataLoader(trainset, **params)
 	testset  = Dataset(Xtest)
-	testset  = data.DataLoader(testset, generator=torch.Generator(device=args.device), **params)
+	testset  = data.DataLoader(testset, **params)
 
 	if plot:
 		x = next(iter(trainset))

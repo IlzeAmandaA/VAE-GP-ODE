@@ -9,9 +9,7 @@ from model.misc.torch_utils import seed_everything
 from model.misc.settings import settings
 from model.core.initialization import initialize_and_fix_kernel_parameters
 
-device = settings.device
-if device.type == 'cuda':
-    torch.set_default_tensor_type('torch.cuda.FloatTensor')
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 SOLVERS = ["dopri5", "bdf", "rk4", "midpoint", "adams", "explicit_adams", "fixed_adams"]
 parser = argparse.ArgumentParser('Learning human motion dynamics with GPODE')
@@ -93,14 +91,16 @@ if __name__ == '__main__':
     seed_everything(args.seed)
 
     ########### device #######
-    args.device = device.type
-    print('Running model on ', args.device)
+    args.device = device
+    print('Running model on', args.device)
 
     ########### data ############ 
     trainset, testset = load_data(args, plot=True)
 
     ########### model ###########
     odegpvae = build_model(args)
+    odegpvae.to(device)
+
 
     ########### initialize model #######
     #TODO how can we do this for the latent space? (can we do this even?)
