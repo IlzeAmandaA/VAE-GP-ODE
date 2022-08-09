@@ -29,10 +29,10 @@ def build_model(args):
 
     #prior distriobution p(Z)
    # prior = Gaussian(ndim=args.q*2) #2q
-    prior = MultivariateNormal(torch.zeros(args.q*2),torch.eye(args.q*2)) 
+    prior = MultivariateNormal(torch.zeros(args.q*2).to(args.device),torch.eye(args.q*2).to(args.device)) 
 
     #dummy prior for q_ode
-    prior_q =  MultivariateNormal(torch.zeros(args.q),torch.eye(args.q)) 
+    prior_q =  MultivariateNormal(torch.zeros(args.q).to(args.device),torch.eye(args.q).to(args.device)) 
     #prior_q = Gaussian(ndim=args.q) #q
 
     # encoder position
