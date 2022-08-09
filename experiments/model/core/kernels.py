@@ -98,7 +98,7 @@ class RBF(torch.nn.Module):
             sq_dist = torch.exp(-0.5 * self.square_dist(X, X2))  # (N,M)
             return self.variance * sq_dist  # (N,M)
 
-    def sample_freq(self, S, seed=None):
+    def sample_freq(self, S, seed=None, device='cpu'):
         """
         Computes random samples from the spectral density for Squared exponential kernel
         @param S: Number of features
@@ -106,7 +106,7 @@ class RBF(torch.nn.Module):
         @return: Tensor a random sample from standard Normal (D_in, S, D_out) if dimwise else (D_in, S)
         """
         omega_shape = (self.D_in, S, self.D_out) if self.dimwise else (self.D_in, S)
-        omega = sample_normal(omega_shape, seed)  # (D_in, S, D_out) or (D_in, S)
+        omega = sample_normal(omega_shape, seed).to(device)  # (D_in, S, D_out) or (D_in, S)
         lengthscales = self.lengthscales.T.unsqueeze(1) if self.dimwise else self.lengthscales.unsqueeze(
             1)  # (D_in,1,D_out) or (D_in,1)
         return omega / lengthscales  # (D_in, S, D_out) or (D_in, S)

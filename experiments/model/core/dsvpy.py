@@ -42,7 +42,7 @@ class DSVGP_Layer(torch.nn.Module):
                      }
     """
 
-    def __init__(self, D_in, D_out, M, S, q_diag=False, dimwise=True, device='cpu'):
+    def __init__(self, D_in, D_out, M, S, q_diag=False, dimwise=True):
         """
         @param D_in: Number of input dimensions
         @param D_out: Number of output dimensions
@@ -53,7 +53,7 @@ class DSVGP_Layer(torch.nn.Module):
         """
         super(DSVGP_Layer, self).__init__()
 
-        self.kern = RBF(D_in, D_out, dimwise).to(device)
+        self.kern = RBF(D_in, D_out, dimwise)
         self.q_diag = q_diag
         self.dimwise = dimwise
 
@@ -73,6 +73,10 @@ class DSVGP_Layer(torch.nn.Module):
             self.Us_sqrt = Param(np.stack([np.eye(M)] * D_out) * 1e-3,  # (D_out,M,M)
                                  transform=transforms.LowerTriangular(M, D_out),
                                  name='Inducing distribution (scale)')
+
+    @property
+    def device(self):
+        return next(self.parameters()).device.type
 
     def sample_inducing(self):
         """
@@ -97,7 +101,7 @@ class DSVGP_Layer(torch.nn.Module):
         """
         # generate parameters required for the Fourier feature maps
         self.rff_weights = sample_normal((self.S, self.D_out))  # (S,D_out)
-        self.rff_omega = self.kern.sample_freq(self.S)  # (D_in,S) or (D_in,S,D_out)
+        self.rff_omega = self.kern.sample_freq(self.S, device=self.device)  # (D_in,S) or (D_in,S,D_out)
         phase_shape = (1, self.S, self.D_out) if self.dimwise else (1, self.S)
         self.rff_phase = sample_uniform(phase_shape) * 2 * np.pi  # (S,D_out)
 
