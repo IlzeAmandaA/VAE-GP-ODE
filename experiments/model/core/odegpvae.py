@@ -60,7 +60,7 @@ class ODEGPVAE(nn.Module):
 
         @return: inducing KL scaled by the number of observations
         """
-        return self.flow.kl() / self.num_observations #TODO divide or multiply by number of observations
+        return self.flow.kl()
 
     def build_lowerbound_terms(self, X, L):
         """
