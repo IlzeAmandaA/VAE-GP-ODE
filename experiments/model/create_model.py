@@ -10,11 +10,10 @@ from model.core.odegpvae import ODEGPVAE
 
 def build_model(args):
     """
-    Builds a model object of gpode.SequenceModel based on training sequence
+    Builds a model object of odevaegp.ODEVAEGP based on training sequence
 
-    @param data_ys: observed/training sequence of (N,T,D) dimensions
     @param args: model setup arguments
-    @return: an object of gpode.SequenceModel class
+    @return: an object of ODEVAEGP class
     """
     gp = DSVGP_Layer(D_in=args.q*2, D_out=args.q, #2q, q
                      M=args.num_inducing,
@@ -64,6 +63,7 @@ def compute_loss(model, data, L, Ndata):
     @param model: a odegpvae object
     @param data: true observation sequence 
     @param L: number of MC samples
+    @param Ndata: number of training data points 
     @return: loss, nll, initial_state_kl, inducing_kl
     """
     lhood, kl_z = model.build_lowerbound_terms(data, L) #should correspond to reconstruction likelihood and prior on z 

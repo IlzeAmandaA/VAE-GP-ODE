@@ -107,10 +107,7 @@ if __name__ == '__main__':
 
 
     ########### initialize model #######
-    #TODO how can we do this for the latent space? (can we do this even?)
     odegpvae = initialize_and_fix_kernel_parameters(odegpvae, lengthscale_value=1.25, variance_value=0.5, fix=False)
-    #init of inducing variables (?) model = initialize_inducing(model, data_pca.trn.ys, data_pca.trn.ts.max(), 1e0)
-    #init initial dist x0 (?)
 
     # ########### train ###########
     optimizer = torch.optim.Adam(odegpvae.parameters(),lr=args.lr)

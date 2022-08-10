@@ -44,9 +44,9 @@ class DSVGP_Layer(torch.nn.Module):
 
     def __init__(self, D_in, D_out, M, S, q_diag=False, dimwise=True):
         """
-        @param D_in: Number of input dimensions
-        @param D_out: Number of output dimensions
-        @param M: Number of inducing points
+        @param D_in: Number of input dimensions 2q
+        @param D_out: Number of output dimensions q
+        @param M: Number of inducing points 
         @param S: Number of features to consider for Fourier feature maps
         @param q_diag: Diagonal approximation for inducing posterior
         @param dimwise: If True, different kernel parameters are given to output dimensions
@@ -146,8 +146,7 @@ class DSVGP_Layer(torch.nn.Module):
             1. Generate sample from the prior :: rff_forward
             2. Compute pathwise updates using samples from inducing posterior :: build_cache
 
-        @param t: time value, usually None as we define time-invariant ODEs
-        @param x: input tensor in (N,D)
+        @param x: input tensor in (N,2q)
         @return: f(x) where f is a sample from GP posterior
         """
         # generate a prior sample using rff

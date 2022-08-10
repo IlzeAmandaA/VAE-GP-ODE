@@ -22,6 +22,13 @@ class ODEGPVAE(nn.Module):
         self.v_steps = steps
 
     def build_encoding(self, X):
+        """
+        Encode the high-dimensional input into a latent space 
+
+        @param X: batch of original data (N,T,nc,d,d)
+        @return z0: encoded representation (N, 2q)
+        @return logp0: initial probability density (N)
+        """
         s0_mu, s0_logv = self.enc_s(X[:,0])
         v0_mu, v0_logv = self.enc_v(torch.squeeze(X[:,0:self.v_steps]))
         # latent samples
@@ -31,10 +38,17 @@ class ODEGPVAE(nn.Module):
         v0 = v0_mu + eps_v0*torch.exp(v0_logv) #N,q
         # TODO ask: in principle, this a dummy variable, right?
         logp0 = self.prior_q.log_prob(eps_s0) + self.prior_q.log_prob(eps_v0) # N 
-        z0 = torch.concat([v0,s0],dim=1)
+        z0 = torch.concat([v0,s0],dim=1) #N, 2q
         return z0, logp0
 
     def build_decoding(self, st_muL, dims):
+        """
+        Given a mean of the latent space decode the input back into the original space.
+
+        @param st_muL: latent mean of the position s (L*N*T,nc,d,d)
+        @param dims: dimensionality of the original variable 
+        @return Xrec: reconstructed in original data space (L,N,T,nc,d,d)
+        """
         L,N,T,nc,d,d = dims
         Xrec = self.decoder(st_muL) # L*N*T,nc,d,d
         Xrec = Xrec.view([L,N,T,nc,d,d]) # L,N,T,nc,d,d
@@ -46,9 +60,11 @@ class ODEGPVAE(nn.Module):
         Given an initial state and time sequence, perform forward ODE integration
         Optionally, the time sequence can be made dense based on self.ts_dense_scale parameter
 
-        @param x0: initial state tensor (N,D)
+        @param z0: initial latent state tensor (N,2q)
+        @param logp0: initial probability (N)
         @param ts: time sequence tensor (T,)
-        @return: forward solution tensor (N,T,D)
+        @return zt: forward solution tensor (N,T,2q)
+        @return logp: forward solution probability tensor (N)
         """
         ts  = self.dt * torch.arange(T,dtype=torch.float).to(z0.device)
         zt, logp = self.flow(z0, logp0, ts, sample=sample)
@@ -66,9 +82,10 @@ class ODEGPVAE(nn.Module):
         """
         Given observed states and time, builds the individual terms for the lowerbound computation
 
-        @param X: observed sequence tensor (N,T,D)
+        @param X: observed sequence tensor (N,T,nc,d,d)
         @param L: number of MC samples
-        @return: ll, kl_z
+        @return loglikelihood: The reconstruction likelihood, assume Bernoulli distribution
+        @return kl_z: The apprxomiated KL between q_ode() distriubtion and prior p(z)
         """
         [N,T,nc,d,d] = X.shape
         #encode

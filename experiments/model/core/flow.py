@@ -17,8 +17,7 @@ class ODEfunc(nn.Module):
         self.diffeq = diffeq
         self.register_buffer("_num_evals", torch.tensor(0.))
 
-    def before_odeint(self, return_divergence, sample, rebuild_cache):
-        self.return_divergence = return_divergence
+    def before_odeint(self, sample, rebuild_cache):
         self.sample = sample
         self._num_evals.fill_(0)
         if rebuild_cache:
@@ -30,11 +29,7 @@ class ODEfunc(nn.Module):
     def forward(self, t, vs_logp): #this forward is my oderhs 
         vs, logp = vs_logp
         self._num_evals += 1
-        if self.return_divergence: #TODO what 
-            y = vs
-            dy, divergence = self.diffeq.forward_divergence(t, y)
-            return (dy, divergence)
-        elif self.sample:
+        if self.sample:
             q = vs.shape[1]//2
             dv = self.diffeq(vs) # N,q
             ds = vs[:,:q]  # N,q
@@ -72,27 +67,17 @@ class Flow(nn.Module):
         self.rtol = rtol
         self.use_adjoint = use_adjoint
 
-    def forward(self, z0, logp0, ts, return_divergence=False, sample=False):
+    def forward(self, z0, logp0, ts, sample=False):
         """
-        Numerical solution of an IVP, and optionally compute divergence term for density transformation computation
-        @param x0: Initial state (N,D) tensor x(t_0).
+        Numerical solution of an IVP
+        @param z0: Initial latent state (N,2q)
+        @param logp0: Initial distirbution (N)
         @param ts: Time sequence of length T, first value is considered as t_0
-        @param return_divergence: Bool flag deciding the divergence computation
-        @return: xs: (N,T,D) tensor
+        @return: zt, logp: (N,T,2q) tensor, (N,T) tensor
         """
         odeint = odeint_adjoint if self.use_adjoint else odeint_nonadjoint
-        self.odefunc.before_odeint(sample=sample, return_divergence=return_divergence, rebuild_cache=True)
-        if return_divergence: #TODO fix still 
-            xs, divergence = odeint(
-                self.odefunc,
-                (z0, torch.zeros(z0.shape[0], 1).to(z0)),
-                ts,
-                atol=self.atol,
-                rtol=self.rtol,
-                method=self.solver
-            )
-            return xs.permute(1, 0, 2), divergence.permute(1, 0, 2)  # (N,T,D), # (N,T,1)
-        elif sample:
+        self.odefunc.before_odeint(sample=sample, rebuild_cache=True)
+        if sample:
             zt, _ = odeint(
                 self.odefunc,
                 (z0,logp0),
@@ -120,7 +105,7 @@ class Flow(nn.Module):
         """
         Calls KL() computation from the diffeq layer
         """
-        return self.odefunc.diffeq.kl().sum()
+        return self.odefunc.diffeq.kl()
 
     def log_prior(self):
         """
