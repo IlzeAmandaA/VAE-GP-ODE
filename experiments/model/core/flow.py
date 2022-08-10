@@ -129,7 +129,7 @@ class Flow(nn.Module):
         return self.odefunc.diffeq.log_prior().sum()
 
     '''
-    Do we need this? (would have to adjust)
+    Do we need this? (would have to adjust) consistency loss 
     def inverse(self, x0, ts, return_divergence=False):
         odeint = odeint_adjoint if self.use_adjoint else odeint_nonadjoint
         self.odefunc.before_odeint(return_divergence=return_divergence, rebuild_cache=False)

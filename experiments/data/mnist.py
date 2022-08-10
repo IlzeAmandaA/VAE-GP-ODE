@@ -18,7 +18,7 @@ def load_mnist_data(args, plot=True):
 		Y = np.squeeze(dataset['Y'])
 		X = X[Y==args.value,:,:]
 
-	N = 500
+	N = args.Ndata
 	T = args.T #16
 	Xtr   = torch.tensor(X[:N],dtype=torch.float32).view([N,T,1,28,28])
 	Xtest = torch.tensor(X[N:],dtype=torch.float32).view([-1,T,1,28,28])

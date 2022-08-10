@@ -1,6 +1,7 @@
 import os 
 import argparse
 import torch
+from datetime import datetime
 from data.wrappers import load_data
 from model.create_model import build_model, compute_loss
 from model.misc.plot_utils import plot_rot_mnist
@@ -41,6 +42,8 @@ parser.add_argument('--batch', type=int, default=25,
                     help="batch size")
 parser.add_argument('--T', type=int, default=16,
                     help="Number of time points")
+parser.add_argument('--Ndata', type=int, default=500,
+                    help="Number training data points")
 
 #vae arguments
 parser.add_argument('--q', type=int, default=8,
@@ -82,7 +85,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     ######### setup output directory and logger ###########
-    args.save = os.path.join(os.path.abspath(os.path.dirname(__file__)), args.save, '')
+    args.save = os.path.join(os.path.abspath(os.path.dirname(__file__)), args.save+datetime.now().strftime('_%d_%m_%Y'), '')
+    print('Results stored in', args.save)
     io_utils.makedirs(args.save)
     io_utils.makedirs(os.path.join(args.save, 'plots'))
     logger = io_utils.get_logger(logpath=os.path.join(args.save, 'logs'))
@@ -115,7 +119,7 @@ if __name__ == '__main__':
         L = 1 if ep<args.Nepoch//2 else 5 # increasing L as optimization proceeds is a good practice
         for i,local_batch in enumerate(trainset):
             minibatch = local_batch.to(device) # B x T x 1 x 28 x 28 (batch, time, image dim)
-            loss, lhood, kl_z, kl_u = compute_loss(odegpvae, minibatch, L)
+            loss, lhood, kl_z, kl_u = compute_loss(odegpvae, minibatch, L, args.Ndata)
             optimizer.zero_grad()
             loss.backward() 
             optimizer.step()
@@ -126,7 +130,7 @@ if __name__ == '__main__':
             for test_batch in testset:
                 test_batch = test_batch.to(device)
                 Xrec_mu, test_mse = odegpvae(test_batch)
-                plot_rot_mnist(test_batch, Xrec_mu.squeeze(0), False, fname='rot_mnist.png')
+                plot_rot_mnist(test_batch, Xrec_mu.squeeze(0), False, fname=os.path.join(args.save, 'plots/rot_mnist.png'))
                 torch.save(odegpvae.state_dict(), os.path.join(args.save, 'odegpvae_mnist.pth'))
                 break
 

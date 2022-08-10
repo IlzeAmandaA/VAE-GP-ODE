@@ -95,11 +95,10 @@ class ODEGPVAE(nn.Module):
         kl_zt   = logpL - log_pzt  # L,N,T
         kl_z    = kl_zt.sum(2).mean(0) # N
         #ll
-        loglik = self.likelihood.log_prob(X,Xrec,L) #L,N,T,d,nc,nc
-        print('log', loglik.mean().shape)
-        print('kl_z', kl_z.mean().shape)
+        loglik_L = self.likelihood.log_prob(X,Xrec,L) #L,N,T,d,nc,nc
+        loglik = loglik_L.sum([2,3,4,5]).mean(0) #N
         
-        return loglik.mean(), kl_z.mean() / self.num_observations #TODO divide or multiply by number of observations
+        return loglik.mean(), kl_z.mean()
     
     def forward(self, X):
         [N,T,nc,d,d] = X.shape

@@ -58,7 +58,7 @@ def build_model(args):
 
     return odegpvae
 
-def compute_loss(model, data, L):
+def compute_loss(model, data, L, Ndata):
     """
     Compute loss for ODEGPVAE optimization
     @param model: a odegpvae object
@@ -68,5 +68,5 @@ def compute_loss(model, data, L):
     """
     lhood, kl_z = model.build_lowerbound_terms(data, L) #should correspond to reconstruction likelihood and prior on z 
     kl_u = model.build_kl() #kl inducing 
-    loss = - (lhood - kl_z - model.beta*kl_u)
+    loss = - (lhood * Ndata - kl_z * Ndata - model.beta*kl_u) #multiply by dataset size Ndata 
     return loss, -lhood, kl_z, kl_u

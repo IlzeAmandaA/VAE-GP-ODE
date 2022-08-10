@@ -59,7 +59,7 @@ class Decoder(nn.Module):
 
     def forward(self, x):
         L,N,T,q = x.shape
-        s = self.fc(x.contiguous().view([L*N*T,q]) ) # N*T,q
+        s = self.fc(x.contiguous().view([L*N*T,q]) ) # N*T,q #might be detrimental 
         h = self.decnn(s)
         return h #z0_mu, z0_log_sig_sq
     
