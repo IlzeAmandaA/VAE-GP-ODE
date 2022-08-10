@@ -105,7 +105,7 @@ class Flow(nn.Module):
         """
         Calls KL() computation from the diffeq layer
         """
-        return self.odefunc.diffeq.kl()
+        return self.odefunc.diffeq.kl() #.sum()
 
     def log_prior(self):
         """

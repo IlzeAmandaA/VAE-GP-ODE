@@ -77,7 +77,7 @@ class ODEGPVAE(nn.Module):
 
         @return: inducing KL scaled by the number of observations
         """
-        return self.flow.kl()
+        return self.flow.kl() #/ self.num_observations (N*T*D)
 
     def build_lowerbound_terms(self, X, L):
         """
@@ -116,7 +116,7 @@ class ODEGPVAE(nn.Module):
         loglik_L = self.likelihood.log_prob(X,Xrec,L) #L,N,T,d,nc,nc
         loglik = loglik_L.sum([2,3,4,5]).mean(0) #N
         
-        return loglik.mean(), kl_z.mean()
+        return loglik.mean(), kl_z.mean() #/ self.num_observations (N*T*D)
     
     def forward(self, X):
         [N,T,nc,d,d] = X.shape
