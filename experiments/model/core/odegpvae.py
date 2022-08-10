@@ -1,6 +1,7 @@
 from pipes import quote
 import torch
 import torch.nn as nn
+from model.misc.plot_utils import plot_latent_dynamics
 
 
 # model implementation
@@ -95,7 +96,7 @@ class ODEGPVAE(nn.Module):
         logpL = []
         #sample L trajectories
         for l in range(L):
-            zt, logp = self.build_flow(z0, logp0, T) # T,N,2q & T,N
+            zt, logp = self.build_flow(z0, logp0, T) # N,T,2q & N,T
             ztL.append(zt.unsqueeze(0)) # 1,N,T,2q
             logpL.append(logp.unsqueeze(0)) # 1,N,T
         ztL   = torch.cat(ztL,0) # L,N,T,2q 1x25x16x16
@@ -123,10 +124,16 @@ class ODEGPVAE(nn.Module):
         z0, logp0 = self.build_encoding(X) #N,2q 
         q = z0.shape[1]//2
         #sample flow
-        zt, _ = self.build_flow(z0, logp0, T, sample=True) # T,N,2q & None
+        zt, _ = self.build_flow(z0, logp0, T, sample=True) # N,T,2q & None
         # decode
         st_mu = zt[:,:,q:] # N,T,q
         Xrec_mu = self.build_decoding(st_mu.unsqueeze(0),(1,N,T,nc,d,d)) # N,T,nc,d,d
         # error
         mse = torch.mean((Xrec_mu-X)**2)
         return Xrec_mu, mse
+
+    def visualize_dynamics(self, data, pca, fname):
+        [N,T,nc,d,d] = data.shape
+        z0, logp0 = self.build_encoding(data)
+        zt, _ = self.build_flow(z0, logp0, T, sample=True)
+        plot_latent_dynamics(zt, N, pca, show=False, fname=fname)

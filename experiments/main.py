@@ -2,6 +2,7 @@ import os
 import argparse
 import torch
 from datetime import datetime
+from sklearn.decomposition import PCA
 from data.wrappers import load_data
 from model.create_model import build_model, compute_loss
 from model.misc.plot_utils import plot_rot_mnist
@@ -79,6 +80,10 @@ parser.add_argument('--log_freq', type=int, default=20,
 parser.add_argument('--device', type=str, default='cpu',
                     help="device")
 
+#plotting arguments
+parser.add_argument('--pca', type=int, default=2,
+                    help="PCA decomposition")
+
                 
 
 if __name__ == '__main__':
@@ -134,4 +139,10 @@ if __name__ == '__main__':
 
         logger.info('Epoch:{:4d}/{:4d} tr_elbo:{:8.2f}  test_mse:{:5.3f}\n'.format(ep, args.Nepoch, loss.item(), test_mse.item()))
     logger.info('********** Optimization completed **********')
+
+    #visualize latent dynamics with pca 
+    with torch.set_grad_enabled(False):
+        pca = PCA(n_components=args.pca)
+        odegpvae.visualize_dynamics(next(iter(trainset)), pca, fname=os.path.join(args.save, 'plots/dynamics_train.png'))
+        odegpvae.visualize_dynamics(next(iter(testset)), pca, fname=os.path.join(args.save, 'plots/dynamics_test.png'))
 
