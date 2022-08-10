@@ -85,7 +85,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     ######### setup output directory and logger ###########
-    args.save = os.path.join(os.path.abspath(os.path.dirname(__file__)), args.save+datetime.now().strftime('_%d_%m_%Y'), '')
+    args.save = os.path.join(os.path.abspath(os.path.dirname(__file__)), args.save+datetime.now().strftime('_%d_%m_%Y-%H:%M'), '')
     print('Results stored in', args.save)
     io_utils.makedirs(args.save)
     io_utils.makedirs(os.path.join(args.save, 'plots'))
