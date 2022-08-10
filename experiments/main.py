@@ -112,6 +112,7 @@ if __name__ == '__main__':
     # ########### train ###########
     optimizer = torch.optim.Adam(odegpvae.parameters(),lr=args.lr)
 
+    logger.info('********** Started Training **********')
     for ep in range(args.Nepoch):
         L = 1 if ep<args.Nepoch//2 else 5 # increasing L as optimization proceeds is a good practice
         for i,local_batch in enumerate(trainset):
@@ -120,7 +121,7 @@ if __name__ == '__main__':
             optimizer.zero_grad()
             loss.backward() 
             optimizer.step()
-            print('Iter:{:<2d} lhood:{:8.2f}  kl_z:{:<8.2f} kl_u:{:8.5f}'.\
+            logger.info('Iter:{:<2d} lhood:{:8.2f}  kl_z:{:<8.2f} kl_u:{:8.5f}'.\
                 format(i, lhood.item(), kl_z.item(), kl_u.item())) 
 
         with torch.set_grad_enabled(False):
@@ -131,6 +132,6 @@ if __name__ == '__main__':
                 torch.save(odegpvae.state_dict(), os.path.join(args.save, 'odegpvae_mnist.pth'))
                 break
 
-        print('Epoch:{:4d}/{:4d} tr_elbo:{:8.2f}  test_mse:{:5.3f}\n'.format(ep, args.Nepoch, loss.item(), test_mse.item()))
-
+        logger.info('Epoch:{:4d}/{:4d} tr_elbo:{:8.2f}  test_mse:{:5.3f}\n'.format(ep, args.Nepoch, loss.item(), test_mse.item()))
+    logger.info('********** Optimization completed **********')
 
