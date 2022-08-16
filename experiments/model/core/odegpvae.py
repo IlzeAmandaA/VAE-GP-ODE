@@ -128,7 +128,7 @@ class ODEGPVAE(nn.Module):
             ztL, logpL = self.sample_trajectores_trace(z0,logp0,T,L,args.trace)
         else:
             ztL = self.sample_trajectores(z0,logp0,T,L,args.trace)
-            logpL = ztL.new(torch.zeros((L,N,T)))
+            logpL = torch.zeros((L,N,T), device=ztL.device)
 
         #decode
         Xrec = self.build_decoding(ztL, (L,N,T,nc,d,d))
