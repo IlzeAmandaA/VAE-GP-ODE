@@ -79,7 +79,7 @@ class ODEGPVAE(nn.Module):
         """
         return self.flow.kl() #/ self.num_observations (N*T*D)
 
-    def build_lowerbound_terms(self, X, L):
+    def build_lowerbound_terms(self, X, L, args):
         """
         Given observed states and time, builds the individual terms for the lowerbound computation
 
@@ -110,7 +110,10 @@ class ODEGPVAE(nn.Module):
         log_pzt = self.prior.log_prob(ztL.contiguous().view([L*N*T,2*q])) # L*N*T
         log_pzt = log_pzt.view([L,N,T]) # L,N,T
         # kl_zt := KL[q(Z|X,f)||p(Z)]
-        kl_zt   = logpL - log_pzt  # L,N,T
+        if args.trace:
+            kl_zt   = logpL - log_pzt  # L,N,T
+        else:
+            kl_zt = logpL # L,N,T               
         kl_z    = kl_zt.sum(2).mean(0) # N
         #ll
         loglik_L = self.likelihood.log_prob(X,Xrec,L) #L,N,T,d,nc,nc
@@ -132,8 +135,4 @@ class ODEGPVAE(nn.Module):
         mse = torch.mean((Xrec_mu-X)**2)
         return Xrec_mu, mse
 
-    def visualize_dynamics(self, data, pca, fname):
-        [N,T,nc,d,d] = data.shape
-        z0, logp0 = self.build_encoding(data)
-        zt, _ = self.build_flow(z0, logp0, T, sample=True)
-        plot_latent_dynamics(zt, N, pca, show=False, fname=fname)
+    
