@@ -26,7 +26,7 @@ def plot_rot_mnist(X, Xrec, show=False, fname='rot_mnist.png'):
 def plot_latent_dynamics(model, data, args, fname):
     [N,T,nc,d,d] = data.shape
     z0, logp0 = model.build_encoding(data)
-    zt = model.build_flow(z0, logp0, T, trace=False)
+    zt = model.build_flow(z0, logp0, T, trace=False).cpu().data.numpy()
     if args.order == 1:
         plot_latent_state(zt, (N, T), args, show=False, fname=fname)
     elif args.order ==2:
