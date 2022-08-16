@@ -15,24 +15,22 @@ def build_model(args):
     @param args: model setup arguments
     @return: an object of ODEVAEGP class
     """
-    gp = DSVGP_Layer(D_in=args.q*2, D_out=args.q, #2q, q
+    gp = DSVGP_Layer(D_in=args.D_in, D_out=args.D_out, #2q, q
                      M=args.num_inducing,
                      S=args.num_features,
                      dimwise=args.dimwise,
                      q_diag=args.q_diag)
 
-    flow = Flow(diffeq=gp, solver=args.solver, use_adjoint=args.use_adjoint)
+    flow = Flow(diffeq=gp, order=args.order, solver=args.solver, use_adjoint=args.use_adjoint)
 
     #likelihood = Gaussian(ndim=D) #2q
     likelihood = Bernoulli() #2q
 
     #prior distriobution p(Z)
-   # prior = Gaussian(ndim=args.q*2) #2q
-    prior = MultivariateNormal(torch.zeros(args.q*2).to(args.device),torch.eye(args.q*2).to(args.device)) 
+    prior = MultivariateNormal(torch.zeros(args.D_in).to(args.device),torch.eye(args.D_in).to(args.device)) 
 
     #dummy prior for q_ode
     prior_q =  MultivariateNormal(torch.zeros(args.q).to(args.device),torch.eye(args.q).to(args.device)) 
-    #prior_q = Gaussian(ndim=args.q) #q
 
     # encoder position
     encoder_s = Encoder(steps= 1, n_filt=args.n_filt, q=args.q)
@@ -51,6 +49,7 @@ def build_model(args):
                         likelihood=likelihood,
                         prior = prior,
                         prior_q= prior_q,
+                        order = args.order,
                         ts_dense_scale=args.ts_dense_scale,
                         beta=args.beta,
                         steps=args.steps)

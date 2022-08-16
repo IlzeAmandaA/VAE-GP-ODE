@@ -26,11 +26,14 @@ def plot_rot_mnist(X, Xrec, show=False, fname='rot_mnist.png'):
 def plot_latent_dynamics(model, data, args, fname):
     [N,T,nc,d,d] = data.shape
     z0, logp0 = model.build_encoding(data)
-    zt, _ = model.build_flow(z0, logp0, T, sample=True)
-    st_mu = zt[:,:,args.q:] # N,T,q
-    vt_mu = zt[:,:,:args.q] # N,T,q
-    plot_latent_state(st_mu, (N, T), args, show=False, fname=fname)
-    plot_latent_velocity(vt_mu, (N, T), args, show=False, fname=fname)
+    zt = model.build_flow(z0, logp0, T, trace=False)
+    if args.order == 1:
+        plot_latent_state(zt, (N, T), args, show=False, fname=fname)
+    elif args.order ==2:
+        st_mu = zt[:,:,args.q:] # N,T,q
+        vt_mu = zt[:,:,:args.q] # N,T,q
+        plot_latent_state(st_mu, (N, T), args, show=False, fname=fname)
+        plot_latent_velocity(vt_mu, (N, T), args, show=False, fname=fname)
 
 def plot_latent_state(st_mu, dims, args, show=False, fname='latent_dyanamics'):
     N,T=dims

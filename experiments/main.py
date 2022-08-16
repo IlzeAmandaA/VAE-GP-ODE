@@ -32,7 +32,8 @@ parser.add_argument('--trace', type=eval, default=True,
                     help="Use trace for loss computation")
 parser.add_argument('--kl_0', type=eval, default=False,
                     help="Specifies to set initial KL to 0")
-
+parser.add_argument('--order', type=int, default=2,
+                    help="order of ODE")
 
 # data processing arguments
 parser.add_argument('--data_root', type=str, default='data/',
@@ -61,6 +62,10 @@ parser.add_argument('--steps', type=int, default=5,
                     help="Number of timesteps used for encoding velocity")
 
 # ode solver arguments
+parser.add_argument('--D_in', type=int, default=16,
+                    help="ODE f(x) input dimensionality")
+parser.add_argument('--D_out', type=int, default=8,
+                    help="ODE f(x) output dimensionality")
 parser.add_argument('--solver', type=str, default='euler', choices=SOLVERS,
                     help="ODE solver for numerical integration")
 parser.add_argument('--ts_dense_scale', type=int, default=2,
@@ -114,8 +119,9 @@ if __name__ == '__main__':
     ########### model ###########
     odegpvae = build_model(args)
     odegpvae.to(device)
-    logger.info('Model parameters: num features {} | num inducing {} | num epochs {} | lr {} | trace {} | kl_0 {} '.format(
-                    args.num_features, args.num_inducing, args.Nepoch,args.lr, args.trace, args.kl_0))
+    logger.info('********** Model Built {} ODE **********'.format(args.order))
+    logger.info('Model parameters: num features {} | num inducing {} | num epochs {} | lr {} | trace {} | kl_0 {} | order {} | D_in {} | D_out {} '.format(
+                    args.num_features, args.num_inducing, args.Nepoch,args.lr, args.trace, args.kl_0, args.order, args.D_in, args.D_out))
 
     ########### initialize model #######
     odegpvae = initialize_and_fix_kernel_parameters(odegpvae, lengthscale_value=1.25, variance_value=0.5, fix=False)
@@ -178,8 +184,8 @@ if __name__ == '__main__':
 
     #visualize latent dynamics with pca 
     with torch.set_grad_enabled(False):
-        plot_latent_dynamics(odegpvae, next(iter(trainset)), args, fname=os.path.join(args.save, 'plots/dynamics_train'))
-        plot_latent_dynamics(odegpvae, next(iter(testset)), args, fname=os.path.join(args.save, 'plots/dynamics_test'))
+        plot_latent_dynamics(odegpvae, next(iter(trainset)).to(device), args, fname=os.path.join(args.save, 'plots/dynamics_train'))
+        plot_latent_dynamics(odegpvae, next(iter(testset)).to(device), args, fname=os.path.join(args.save, 'plots/dynamics_test'))
 
     #plot loss
     plot_trace(elbo_meter, nll_meter, z_kl_meter, inducing_kl_meter, args)
