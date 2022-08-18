@@ -44,6 +44,8 @@ def plot_latent_state(st_mu, dims, args, show=False, fname='latent_dyanamics'):
         st_pca = pca_s.transform(st_mu[n]) # T,2
         ax1.plot(st_pca[:,0], st_pca[:,1],lw=1)
         ax1.scatter(st_pca[:,0], st_pca[:,1], s = 25, zorder=2.5)
+        ax1.set_xlabel('PCA 1 component')        
+        ax1.set_ylabel('PCA 2 component')
         ax1.set_title('Latent state pca')
     ax1.grid()   
     if show:
@@ -100,3 +102,7 @@ def plot_trace(elbo_meter, nll_meter,  z_kl_meter, inducing_kl_meter, args, make
                     bbox_inches='tight', pad_inches=0.01)
         plt.close(fig)
 
+
+def plot_vectorfield():
+
+    pass

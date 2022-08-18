@@ -138,6 +138,7 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam(odegpvae.parameters(),lr=args.lr)
 
     logger.info('********** Started Training **********')
+    if args.kl_0: logger.info("Set KLs to 0")
     begin = time.time()
     global_itr = 0
     for ep in range(args.Nepoch):
@@ -145,10 +146,9 @@ if __name__ == '__main__':
         for itr,local_batch in enumerate(trainset):
             minibatch = local_batch.to(device) # B x T x 1 x 28 x 28 (batch, time, image dim)
             loss, nlhood, kl_z, kl_u = compute_loss(odegpvae, minibatch, L, args)
-            if args.kl_0 and ep==0 and itr==0:
-                logger.info("Initialize KLs to 0")
-                kl_z = torch.zeros_like(kl_z)
-                kl_u = torch.zeros_like(kl_u)
+            if args.kl_0:
+                kl_z = kl_z * 0.0
+                kl_u = kl_u * 0.0
                 loss = nlhood - kl_z  - kl_u
             optimizer.zero_grad()
             loss.backward() 

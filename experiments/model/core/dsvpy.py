@@ -80,6 +80,7 @@ class DSVGP_Layer(torch.nn.Module):
 
     def sample_inducing(self):
         """
+        sample the whitened inducing points 
         Generate a sample from the inducing posterior q(u) ~ N(m, S)
         @return: inducing sample (M,D) tensor
         """
