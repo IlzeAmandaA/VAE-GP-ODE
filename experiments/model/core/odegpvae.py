@@ -146,17 +146,23 @@ class ODEGPVAE(nn.Module):
         
         return loglik.mean(), kl_z.mean() #/ self.num_observations (N*T*D)
     
-    def forward(self, X):
+    def forward(self, X, T_custom=None):
         [N,T,nc,d,d] = X.shape
+        if T_custom:
+            T_orig = T
+            T = T_custom
         #encode
         z0, logp0 = self.build_encoding(X) #N,2q 
         q = z0.shape[1]//2
         #sample flow
         zt = self.build_flow(z0, logp0, T, trace=False) # N,T,2q & None
         # decode
-        Xrec_mu = self.build_decoding(zt.unsqueeze(0),(1,N,T,nc,d,d)) # N,T,nc,d,d
+        Xrec_mu = self.build_decoding(zt.unsqueeze(0),(1,N,T,nc,d,d)).squeeze(0) # N,T,nc,d,d
         # error
-        mse = torch.mean((Xrec_mu-X)**2)
+        if T_custom:
+            mse = torch.mean((Xrec_mu[:,:T_orig,:]-X)**2)
+        else:
+            mse = torch.mean((Xrec_mu-X)**2)
         return Xrec_mu, mse
 
     

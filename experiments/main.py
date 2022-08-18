@@ -92,8 +92,8 @@ parser.add_argument('--device', type=str, default='cpu',
                     help="device")
 
 #plotting arguments
-parser.add_argument('--pca', type=int, default=2,
-                    help="PCA decomposition")
+parser.add_argument('--Tlong', type=int, default=3,
+                    help="future prediction")
 
 
 if __name__ == '__main__':
@@ -141,6 +141,7 @@ if __name__ == '__main__':
     if args.kl_0: logger.info("Set KLs to 0")
     begin = time.time()
     global_itr = 0
+    [N,T,nc,d,d] = next(iter(trainset)).shape
     for ep in range(args.Nepoch):
         L = 1 if ep<args.Nepoch//2 else 5 # increasing L as optimization proceeds is a good practice
         for itr,local_batch in enumerate(trainset):
@@ -170,7 +171,7 @@ if __name__ == '__main__':
                                 z_kl_meter.val, z_kl_meter.avg,
                                 inducing_kl_meter.val, inducing_kl_meter.avg)) 
 
-        with torch.set_grad_enabled(False):
+        with torch.no_grad():
             for test_batch in testset:
                 test_batch = test_batch.to(device)
                 Xrec_mu, test_mse = odegpvae(test_batch)
@@ -183,9 +184,16 @@ if __name__ == '__main__':
     logger.info('********** Optimization completed **********')
 
     #visualize latent dynamics with pca 
-    with torch.set_grad_enabled(False):
+    with torch.no_grad():
         plot_latent_dynamics(odegpvae, next(iter(trainset)).to(device), args, fname=os.path.join(args.save, 'plots/dynamics_train'))
         plot_latent_dynamics(odegpvae, next(iter(testset)).to(device), args, fname=os.path.join(args.save, 'plots/dynamics_test'))
 
     #plot loss
     plot_trace(elbo_meter, nll_meter, z_kl_meter, inducing_kl_meter, args)
+
+    #plot longer rollouts 
+    with torch.no_grad():
+        test_batch = next(iter(testset))[:3,:].to(device) #sample 3 images
+        Xrec_mu, test_mse = odegpvae(test_batch, args.Tlong*T)
+        plot_rollout(Xrec_mu,fname=os.path.join(args.save, 'plots/rollout.png'))
+
