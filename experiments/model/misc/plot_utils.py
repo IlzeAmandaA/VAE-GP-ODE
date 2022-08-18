@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.decomposition import PCA
+import torch
 import os
 
 # plotting
@@ -26,47 +27,53 @@ def plot_rot_mnist(X, Xrec, show=False, fname='rot_mnist.png'):
 def plot_latent_dynamics(model, data, args, fname):
     [N,T,nc,d,d] = data.shape
     z0, logp0 = model.build_encoding(data)
-    zt = model.build_flow(z0, logp0, T, trace=False).cpu().data.numpy()
+    zt = model.build_flow(z0, logp0, T, trace=False)
     if args.order == 1:
-        plot_latent_state(zt, (N, T), args, show=False, fname=fname)
+        plot_latent_state(zt, show=False, fname=fname)
     elif args.order ==2:
         st_mu = zt[:,:,args.q:] # N,T,q
         vt_mu = zt[:,:,:args.q] # N,T,q
-        plot_latent_state(st_mu, (N, T), args, show=False, fname=fname)
-        plot_latent_velocity(vt_mu, (N, T), args, show=False, fname=fname)
+        plot_latent_state(st_mu, show=False, fname=fname)
+        plot_latent_velocity(vt_mu, show=False, fname=fname)
 
-def plot_latent_state(st_mu, dims, args, show=False, fname='latent_dyanamics'):
-    N,T=dims
-    pca_s = PCA(n_components=args.pca).fit(st_mu.reshape(N*T,args.q))
-    fig, (ax1) = plt.subplots(nrows=1, ncols=1,figsize=(16, 8))
-   # fig.suptitle("Latent Dynamics ", fontsize=18, y=0.95)
+def plot_latent_state(st_mu, show=False, fname='latent_dyanamics'):
+    N,T,q = st_mu.shape
+    st_mu = st_mu.detach() # N,T,q
+    st_mu = st_mu.reshape(N*T,q) #NT,q
+    U,S,V = torch.pca_lowrank(st_mu)
+    st_pca = st_mu@V[:,:2] 
+    st_pca =  st_pca.reshape(N,T,2).cpu().numpy() # N,T,2
+    plt.figure(1,(5,5))
     for n in range(N):
-        st_pca = pca_s.transform(st_mu[n]) # T,2
-        ax1.plot(st_pca[:,0], st_pca[:,1],lw=1)
-        ax1.scatter(st_pca[:,0], st_pca[:,1], s = 25, zorder=2.5)
-        ax1.set_xlabel('PCA 1 component')        
-        ax1.set_ylabel('PCA 2 component')
-        ax1.set_title('Latent state pca')
-    ax1.grid()   
+        p, = plt.plot(st_pca[n,0,0],st_pca[n,0,1],'o',markersize=10)
+        plt.plot(st_pca[n,:,0],st_pca[n,:,1],'-*', color=p.get_color())
+
+    plt.xlabel('PCA-1',fontsize=15)
+    plt.ylabel('PCA-2',fontsize=15)
+    plt.title('Latent trajectories',fontsize=18)
+    plt.tight_layout()
     if show:
         plt.show()
     else:
         plt.savefig(fname + '_state.png')
         plt.close()
 
-def plot_latent_velocity(vt_mu, dims, args, show=False, fname='latent_dyanamics'):
-    N,T=dims
+def plot_latent_velocity(vt_mu, show=False, fname='latent_dyanamics'):
+    N,T,q = vt_mu.shape
+    vt_mu = vt_mu.detach() # N,T,q
+    vt_mu = vt_mu.reshape(N*T,q) #NT,q
+    U,S,V = torch.pca_lowrank(vt_mu)
+    vt_pca = vt_mu@V[:,:2] 
+    vt_pca =  vt_pca.reshape(N,T,2).cpu().numpy() # N,T,2
     ts = [t for t in range(T)]
-    pca_v = PCA(n_components=args.pca).fit(vt_mu.reshape(N*T,args.q))
     fig, (ax1,ax2) = plt.subplots(nrows=1, ncols=2,figsize=(16, 8))
     fig.suptitle("Latent Dynamics", fontsize=18, y=0.95)
     for n in range(N):
-        vt_pca = pca_v.transform(vt_mu[n])
-        ax1.plot(ts, vt_pca[:,0],lw=1)
-        ax1.scatter(ts, vt_pca[:,0], s = 25, zorder=2.5)
+        p1, = ax1.plot(ts[0], vt_pca[n,0,0],'o',markersize=10)
+        p2, = ax2.plot(ts[0],vt_pca[n,0,1],'o',markersize=10)
+        ax1.plot(ts, vt_pca[n,:,0],'-*', color=p1.get_color())
+        ax2.plot(ts, vt_pca[n,:,1], '-*', color=p2.get_color())
         ax1.set_title('Velocity 1st component')
-        ax2.plot(ts, vt_pca[:,1], lw=1)
-        ax2.scatter(ts, vt_pca[:,1], s = 25, zorder=2.5)
         ax2.set_title('Velocity 2nd component')
 
     ax1.grid()
