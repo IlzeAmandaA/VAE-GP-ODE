@@ -132,6 +132,8 @@ if __name__ == '__main__':
     nll_meter = log_utils.CachedRunningAverageMeter(10)
     z_kl_meter = log_utils.CachedRunningAverageMeter(10)
     inducing_kl_meter = log_utils.CachedRunningAverageMeter(10)
+    logpL_meter = log_utils.CachedRunningAverageMeter(10)
+    logztL_meter = log_utils.CachedRunningAverageMeter(10)
     mse_meter = log_utils.CachedAverageMeter()
     time_meter = log_utils.CachedAverageMeter()
 
@@ -147,7 +149,7 @@ if __name__ == '__main__':
         L = 1 if ep<args.Nepoch//2 else 5 # increasing L as optimization proceeds is a good practice
         for itr,local_batch in enumerate(trainset):
             minibatch = local_batch.to(device) # B x T x 1 x 28 x 28 (batch, time, image dim)
-            loss, nlhood, kl_z, kl_u = compute_loss(odegpvae, minibatch, L, args)
+            loss, nlhood, kl_z, kl_u, logpL, log_pzt = compute_loss(odegpvae, minibatch, L, args)
             if args.kl_0:
                 kl_z = kl_z * 0.0
                 kl_u = kl_u * 0.0
@@ -161,6 +163,8 @@ if __name__ == '__main__':
             nll_meter.update(nlhood.item(), global_itr)
             z_kl_meter.update(kl_z.item(), global_itr)
             inducing_kl_meter.update(kl_u.item(), global_itr)
+            logpL_meter.update(logpL.item(), global_itr)
+            logztL_meter.update(log_pzt.item(), global_itr)
             time_meter.update(time.time() - begin, global_itr)
             global_itr +=1
 
@@ -193,7 +197,7 @@ if __name__ == '__main__':
         plot_latent_dynamics(odegpvae, next(iter(testset)).to(device), args, fname=os.path.join(args.save, 'plots/dynamics_test'))
 
     #plot loss
-    plot_trace(elbo_meter, nll_meter, z_kl_meter, inducing_kl_meter, args)
+    plot_trace(elbo_meter, nll_meter, z_kl_meter, inducing_kl_meter, logpL_meter, logztL_meter, args)
 
     #plot longer rollouts 
     with torch.no_grad():

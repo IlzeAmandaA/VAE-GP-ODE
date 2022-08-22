@@ -138,13 +138,13 @@ class ODEGPVAE(nn.Module):
         log_pzt = self.prior.log_prob(ztL.contiguous().view([L*N*T,ztL.shape[-1]])) # L*N*T
         log_pzt = log_pzt.view([L,N,T]) # L,N,T
         # kl_zt := KL[q(Z|X,f)||p(Z)]
-        kl_zt   = logpL - log_pzt  # L,N,T             
+        kl_zt   = logpL - log_pzt  # L,N,T        
         kl_z    = kl_zt.sum(2).mean(0) # N
         #ll
         loglik_L = self.likelihood.log_prob(X,Xrec,L) #L,N,T,d,nc,nc
         loglik = loglik_L.sum([2,3,4,5]).mean(0) #N
         
-        return loglik.mean(), kl_z.mean() #/ self.num_observations (N*T*D)
+        return loglik.mean(), kl_z.mean(), logpL.sum(2).mean(), log_pzt.sum(2).mean() #/ self.num_observations (N*T*D)
     
     def forward(self, X, T_custom=None):
         [N,T,nc,d,d] = X.shape

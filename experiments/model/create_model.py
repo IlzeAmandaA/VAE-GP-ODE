@@ -66,7 +66,18 @@ def compute_loss(model, data, L, args):
     @param Ndata: number of training data points 
     @return: loss, nll, initial_state_kl, inducing_kl
     """
-    lhood, kl_z = model.build_lowerbound_terms(data, L, args)
+    lhood, kl_z, logpL, log_pzt = model.build_lowerbound_terms(data, L, args)
     kl_u = model.build_kl() 
     loss = - (lhood * args.Ndata - kl_z * args.Ndata - model.beta*kl_u) 
-    return loss, -lhood, kl_z, kl_u
+    return loss, -lhood, kl_z, kl_u, logpL, log_pzt
+
+
+#min perspective (kl_z) --> best for kl_z to be 0 to neg
+#max persepctive (-kl_z) --> best for kl_z to be 0 or neg 
+
+
+# if no trace, i want my log_pzt to be big (as i am using -log_pzt), the prob log_pzt will be
+# between - inf to 0, hence the bigger it gets if my latent space samples are close to mean 0 
+# this means I push my latent space variables ztL to be closer to guassian of zero mean 
+
+# now logpL in principle should alwasy be negative 

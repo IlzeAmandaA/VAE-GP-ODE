@@ -99,8 +99,8 @@ def plot_latent_velocity(vt_mu, show=False, fname='latent_dyanamics'):
         plt.savefig(fname+'_velocity.png')
         plt.close()
 
-def plot_trace(elbo_meter, nll_meter,  z_kl_meter, inducing_kl_meter, args, make_plot=False):
-    fig, axs = plt.subplots(2, 2, figsize=(20, 16))
+def plot_trace(elbo_meter, nll_meter,  z_kl_meter, inducing_kl_meter, logpL_meter, logztL_meter, args, make_plot=False):
+    fig, axs = plt.subplots(3, 2, figsize=(20, 16))
 
     axs[0][0].plot(elbo_meter.iters, elbo_meter.vals)
     axs[0][0].set_title("Loss (-elbo) function")
@@ -114,6 +114,12 @@ def plot_trace(elbo_meter, nll_meter,  z_kl_meter, inducing_kl_meter, args, make
     axs[1][1].plot(inducing_kl_meter.iters,inducing_kl_meter.vals)
     axs[1][1].set_title("Inducing KL")
     axs[1][1].grid()
+    axs[2][0].plot(logpL_meter.iters, logpL_meter.vals)
+    axs[2][0].set_title("Loss log trace")
+    axs[2][0].grid()
+    axs[2][1].plot(logztL_meter.iters, logztL_meter.vals)
+    axs[2][1].set_title("Loss log p(z)")
+    axs[2][1].grid()
 
     fig.subplots_adjust()
     if make_plot:
