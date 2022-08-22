@@ -1,8 +1,9 @@
+from telnetlib import GA
 import torch
 from torch.distributions import MultivariateNormal 
 from model.core.dsvpy import DSVGP_Layer
 from model.core.flow import Flow
-from model.core.distributions import Bernoulli, Gaussian
+from model.core.distributions import Bernoulli, Multivariate_Standard
 from model.core.vae import Encoder, Decoder
 from model.core.odegpvae import ODEGPVAE
 
@@ -27,10 +28,10 @@ def build_model(args):
     likelihood = Bernoulli() #2q
 
     #prior distriobution p(Z)
-    prior = MultivariateNormal(torch.zeros(args.D_in).to(args.device),torch.eye(args.D_in).to(args.device)) 
+    prior = Multivariate_Standard(args.D_in).to(args.device)
 
-    #dummy prior for q_ode
-    prior_q =  MultivariateNormal(torch.zeros(args.q).to(args.device),torch.eye(args.q).to(args.device)) 
+    #prior for q_ode
+    prior_q = Multivariate_Standard(args.q).to(args.device)
 
     # encoder position
     encoder_s = Encoder(steps= 1, n_filt=args.n_filt, q=args.q)

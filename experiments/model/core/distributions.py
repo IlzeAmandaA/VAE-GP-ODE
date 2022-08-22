@@ -6,12 +6,14 @@ from torch.nn import init
 
 import numpy as np
 
+PI = torch.from_numpy(np.asarray(np.pi))
+
 class Bernoulli(nn.Module):
     """
     Bernoulli likelihood
     """
 
-    def __init__(self, reudction=None):
+    def __init__(self):
         super(Bernoulli, self).__init__()
 
     @property
@@ -28,43 +30,30 @@ class Bernoulli(nn.Module):
         #lhood = lhood_L.sum([2,3,4,5]).mean(0) # N
 
 
-class Gaussian(nn.Module):
+class Multivariate_Standard(nn.Module):
     """
-    Gaussian likelihood
+    Multivariate Standard Gaussian Distribution
     """
 
-    def __init__(self, ndim=1, init_val=0.25):
-        super(Gaussian, self).__init__()
-        self.unconstrained_variance = torch.nn.Parameter(torch.ones(ndim), requires_grad=True)
-        self.mu = torch.nn.Parameter(torch.zeros(ndim), requires_grad=True)
-        self._initialize(init_val)
-
-    def _initialize(self, x):
-        init.constant_(self.unconstrained_variance, invsoftplus(torch.tensor(x)).item())
+    def __init__(self, L):
+        super(Multivariate_Standard, self).__init__()
+        # params weights
+        self.means = torch.zeros(L)
+        self.covariance = torch.eye(L)
 
     @property
-    def variance(self):
-        return softplus(self.unconstrained_variance)
+    def _probability(self):
+        return 'Standard Gaussian'
+    
+    def get_params(self):
+        return self.means, self.covariance
 
-    def log_prob(self, X, mu=None):
-        if mu:
-            return -0.5 * (np.log(2.0 * np.pi) + torch.log(self.variance) + torch.pow(X - mu, 2) / self.variance)
-        else:
-            return -0.5 * (np.log(2.0 * np.pi) + torch.log(self.variance) + torch.pow(X - self.mu, 2) / self.variance)
+    def log_prob(self, x_m):
+        '''
+        log standrad normal 
+        '''
+        d = x_m.shape[-1]
+        return torch.log(1 / torch.sqrt((2 * torch.pi)**d* torch.det(self.covariance)) * \
+             torch.exp(-0.5 * torch.sum((x_m-self.means)*torch.mm((x_m-self.means),self.covariance), dim=1)))
 
 
-class ProjectedGaussian(Gaussian):
-    """
-    Gaussian likelihood with a projection from latent space to observation space
-    """
-
-    def __init__(self, projection, ndim=1, init_val=0.25):
-        super(ProjectedGaussian, self).__init__(ndim, init_val)
-        self.projection = projection
-
-    def log_prob(self, F, Y):
-        if F.ndim == 4:
-            F = torch.stack([self.projection(_F) for _F in F])
-        else:
-            F = self.projection(F)
-        return -0.5 * (np.log(2.0 * np.pi) + torch.log(self.variance) + torch.pow(F - Y, 2) / self.variance)

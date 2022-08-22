@@ -1,5 +1,6 @@
 import os 
 import time
+from datetime import timedelta
 import argparse
 import torch
 from datetime import datetime
@@ -127,11 +128,11 @@ if __name__ == '__main__':
     odegpvae = initialize_and_fix_kernel_parameters(odegpvae, lengthscale_value=1.25, variance_value=0.5, fix=False)
 
     ########### log loss values ########
-    elbo_meter = log_utils.CachedRunningAverageMeter(0.98)
-    nll_meter = log_utils.CachedRunningAverageMeter(0.98)
-    z_kl_meter = log_utils.CachedRunningAverageMeter(0.98)
-    inducing_kl_meter = log_utils.CachedRunningAverageMeter(0.98)
-    mse_meter = log_utils.CachedRunningAverageMeter(0.98)
+    elbo_meter = log_utils.CachedRunningAverageMeter(10)
+    nll_meter = log_utils.CachedRunningAverageMeter(10)
+    z_kl_meter = log_utils.CachedRunningAverageMeter(10)
+    inducing_kl_meter = log_utils.CachedRunningAverageMeter(10)
+    mse_meter = log_utils.CachedAverageMeter()
     time_meter = log_utils.CachedAverageMeter()
 
     # ########### train ###########
@@ -164,24 +165,27 @@ if __name__ == '__main__':
             global_itr +=1
 
             if itr % args.log_freq == 0 :
-                logger.info('Iter:{:<2d} | Time {:0.4f}({:.4f}) | elbo {:8.2f}({:8.2f}) | nlhood:{:8.2f}({:8.2f}) | kl_z:{:<8.2f}({:<8.2f}) | kl_u:{:8.5f}({:8.5f})'.\
-                    format(itr, time_meter.sum, time_meter.avg, 
+                logger.info('Iter:{:<2d} | Time {} | elbo {:8.2f}({:8.2f}) | nlhood:{:8.2f}({:8.2f}) | kl_z:{:<8.2f}({:<8.2f}) | kl_u:{:8.5f}({:8.5f})'.\
+                    format(itr, timedelta(seconds=time_meter.val), 
                                 elbo_meter.val, elbo_meter.avg,
                                 nll_meter.val, nll_meter.avg,
                                 z_kl_meter.val, z_kl_meter.avg,
                                 inducing_kl_meter.val, inducing_kl_meter.avg)) 
 
         with torch.no_grad():
-            for test_batch in testset:
+            mse_meter.reset()
+            for itr_test,test_batch in enumerate(testset):
                 test_batch = test_batch.to(device)
                 Xrec_mu, test_mse = odegpvae(test_batch)
                 plot_rot_mnist(test_batch, Xrec_mu.squeeze(0), False, fname=os.path.join(args.save, 'plots/rot_mnist.png'))
                 torch.save(odegpvae.state_dict(), os.path.join(args.save, 'odegpvae_mnist.pth'))
-                mse_meter.update(test_mse.item(),ep)
+                mse_meter.update(test_mse.item(),itr_test)
                 break
-        logger.info('Epoch:{:4d}/{:4d}| tr_elbo:{:8.2f}({:8.2f}) | test_mse:{:5.3f}\n'.format(ep, args.Nepoch, elbo_meter.val, elbo_meter.avg, mse_meter.val))
+        logger.info('Epoch:{:4d}/{:4d}| tr_elbo:{:8.2f}({:8.2f}) | test_mse:{:5.3f}({:5.3f})\n'.format(ep, args.Nepoch, elbo_meter.val, elbo_meter.avg, mse_meter.val, mse_meter.avg))
 
     logger.info('********** Optimization completed **********')
+    logger.info("Kernel lengthscales {}".format(odegpvae.flow.odefunc.diffeq.kern.lengthscales.data))
+    logger.info("Kernel variance {}".format(odegpvae.flow.odefunc.diffeq.kern.variance.data))
 
     #visualize latent dynamics with pca 
     with torch.no_grad():
