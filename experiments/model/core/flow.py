@@ -29,6 +29,9 @@ class ODEfunc(nn.Module):
         return self._num_evals.item()
 
     def first_order(self, vs_logp):       
+        '''
+        trace computation based on: https://github.com/rtqichen/ffjord/blob/master/lib/layers/odefunc.py#L13
+        '''
         if self.trace:
             vs, logp = vs_logp
             q = vs.shape[1]
