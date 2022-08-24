@@ -40,6 +40,7 @@ class ODEfunc(nn.Module):
             #             [torch.autograd.grad(dvs[:,i],vs,torch.ones_like(dvs[:,i]),
             #             retain_graph=True,create_graph=True)[0].contiguous()[:,i]
             #             for i in range(q)],1) # N,q --> df(x)_i/dx_i, i=1..q
+            #print or assert 
             ddvi_dvi = torch.stack(
                         [torch.autograd.grad(dvs[:,i].sum(),vs, create_graph=True)[0].contiguous()[:,i].contiguous()
                         for i in range(q)],1) # N,q --> df(x)_i/dx_i, i=1..q

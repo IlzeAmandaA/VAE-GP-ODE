@@ -13,7 +13,7 @@ from model.misc.torch_utils import seed_everything
 from model.misc.settings import settings
 from model.core.initialization import initialize_and_fix_kernel_parameters
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+# device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 SOLVERS = ["dopri5", "bdf", "rk4", "midpoint", "adams", "explicit_adams", "fixed_adams"]
 parser = argparse.ArgumentParser('Learning human motion dynamics with GPODE')
@@ -111,15 +111,15 @@ if __name__ == '__main__':
     seed_everything(args.seed)
 
     ########### device #######
-    args.device = device
-    logger.info('Running model on {}'.format(args.device.type))
+    #args.device = device
+    logger.info('Running model on {}'.format(args.device))
 
     ########### data ############ 
     trainset, testset = load_data(args, plot=True)
 
     ########### model ###########
     odegpvae = build_model(args)
-    odegpvae.to(device)
+    odegpvae.to(args.device)
     logger.info('********** Model Built {} ODE **********'.format(args.order))
     logger.info('Model parameters: num features {} | num inducing {} | num epochs {} | lr {} | trace {} | kl_0 {} | order {} | D_in {} | D_out {} '.format(
                     args.num_features, args.num_inducing, args.Nepoch,args.lr, args.trace, args.kl_0, args.order, args.D_in, args.D_out))
@@ -130,7 +130,7 @@ if __name__ == '__main__':
     ########### log loss values ########
     elbo_meter = log_utils.CachedRunningAverageMeter(10)
     nll_meter = log_utils.CachedRunningAverageMeter(10)
-    z_kl_meter = log_utils.CachedRunningAverageMeter(10)
+    reg_kl_meter = log_utils.CachedRunningAverageMeter(10)
     inducing_kl_meter = log_utils.CachedRunningAverageMeter(10)
     logpL_meter = log_utils.CachedRunningAverageMeter(10)
     logztL_meter = log_utils.CachedRunningAverageMeter(10)
@@ -148,12 +148,12 @@ if __name__ == '__main__':
     for ep in range(args.Nepoch):
         L = 1 if ep<args.Nepoch//2 else 5 # increasing L as optimization proceeds is a good practice
         for itr,local_batch in enumerate(trainset):
-            minibatch = local_batch.to(device) # B x T x 1 x 28 x 28 (batch, time, image dim)
-            loss, nlhood, kl_z, kl_u, logpL, log_pzt = compute_loss(odegpvae, minibatch, L, args)
+            minibatch = local_batch.to(args.device) # B x T x 1 x 28 x 28 (batch, time, image dim)
+            loss, nlhood, kl_reg, kl_u, logpL, log_pzt = compute_loss(odegpvae, minibatch, L, args)
             if args.kl_0:
-                kl_z = kl_z * 0.0
+                kl_reg = kl_reg * 0.0
                 kl_u = kl_u * 0.0
-                loss = nlhood - kl_z  - kl_u
+                loss = nlhood - kl_reg  - kl_u
             optimizer.zero_grad()
             loss.backward() 
             optimizer.step()
@@ -161,7 +161,7 @@ if __name__ == '__main__':
             #store values 
             elbo_meter.update(loss.item(), global_itr)
             nll_meter.update(nlhood.item(), global_itr)
-            z_kl_meter.update(kl_z.item(), global_itr)
+            reg_kl_meter.update(kl_reg.item(), global_itr)
             inducing_kl_meter.update(kl_u.item(), global_itr)
             logpL_meter.update(logpL.item(), global_itr)
             logztL_meter.update(log_pzt.item(), global_itr)
@@ -169,17 +169,17 @@ if __name__ == '__main__':
             global_itr +=1
 
             if itr % args.log_freq == 0 :
-                logger.info('Iter:{:<2d} | Time {} | elbo {:8.2f}({:8.2f}) | nlhood:{:8.2f}({:8.2f}) | kl_z:{:<8.2f}({:<8.2f}) | kl_u:{:8.5f}({:8.5f})'.\
+                logger.info('Iter:{:<2d} | Time {} | elbo {:8.2f}({:8.2f}) | nlhood:{:8.2f}({:8.2f}) | kl_reg:{:<8.2f}({:<8.2f}) | kl_u:{:8.5f}({:8.5f})'.\
                     format(itr, timedelta(seconds=time_meter.val), 
                                 elbo_meter.val, elbo_meter.avg,
                                 nll_meter.val, nll_meter.avg,
-                                z_kl_meter.val, z_kl_meter.avg,
+                                reg_kl_meter.val, reg_kl_meter.avg,
                                 inducing_kl_meter.val, inducing_kl_meter.avg)) 
 
         with torch.no_grad():
             mse_meter.reset()
             for itr_test,test_batch in enumerate(testset):
-                test_batch = test_batch.to(device)
+                test_batch = test_batch.to(args.device)
                 Xrec_mu, test_mse = odegpvae(test_batch)
                 plot_rot_mnist(test_batch, Xrec_mu.squeeze(0), False, fname=os.path.join(args.save, 'plots/rot_mnist.png'))
                 torch.save(odegpvae.state_dict(), os.path.join(args.save, 'odegpvae_mnist.pth'))
@@ -193,15 +193,15 @@ if __name__ == '__main__':
 
     #visualize latent dynamics with pca 
     with torch.no_grad():
-        plot_latent_dynamics(odegpvae, next(iter(trainset)).to(device), args, fname=os.path.join(args.save, 'plots/dynamics_train'))
-        plot_latent_dynamics(odegpvae, next(iter(testset)).to(device), args, fname=os.path.join(args.save, 'plots/dynamics_test'))
+        plot_latent_dynamics(odegpvae, next(iter(trainset)).to(args.device), args, fname=os.path.join(args.save, 'plots/dynamics_train'))
+        plot_latent_dynamics(odegpvae, next(iter(testset)).to(args.device), args, fname=os.path.join(args.save, 'plots/dynamics_test'))
 
     #plot loss
-    plot_trace(elbo_meter, nll_meter, z_kl_meter, inducing_kl_meter, logpL_meter, logztL_meter, args)
+    plot_trace(elbo_meter, nll_meter, reg_kl_meter, inducing_kl_meter, logpL_meter, logztL_meter, args)
 
     #plot longer rollouts 
     with torch.no_grad():
-        test_batch = next(iter(testset))[:3,:].to(device) #sample 3 images
+        test_batch = next(iter(testset))[:3,:].to(args.device) #sample 3 images
         Xrec_mu, test_mse = odegpvae(test_batch, args.Tlong*T)
         plot_rollout(Xrec_mu,fname=os.path.join(args.save, 'plots/rollout.png'))
 
