@@ -28,10 +28,10 @@ def build_model(args):
     likelihood = Bernoulli() #2q
 
     #prior distriobution p(Z)
-    prior = Multivariate_Standard(args.D_in).to(args.device)
+    prior = Multivariate_Standard(args.D_in, args.device) #.to(args.device)
 
     #prior for q_ode
-    prior_q = Multivariate_Standard(args.q).to(args.device)
+    prior_q = Multivariate_Standard(args.q, args.device) #.to(args.device)
 
     # encoder position
     encoder_s = Encoder(steps= 1, n_filt=args.n_filt, q=args.q)

@@ -10,4 +10,4 @@ def softplus(x):
 def invsoftplus(x):
     lower = 1e-12
     xs = torch.max(x - lower, torch.tensor(torch.finfo(x.dtype).eps).to(x))
-    return xs + torch.log(-torch.expm1(-xs))
+    return xs + torch.log(-(torch.exp(-xs)-1))

@@ -3,7 +3,6 @@ from model.misc.constraint_utils import softplus, invsoftplus
 import torch
 import torch.nn as nn
 from torch.nn import init
-
 import numpy as np
 
 PI = torch.from_numpy(np.asarray(np.pi))
@@ -35,11 +34,11 @@ class Multivariate_Standard(nn.Module):
     Multivariate Standard Gaussian Distribution
     """
 
-    def __init__(self, L):
+    def __init__(self, L, device):
         super(Multivariate_Standard, self).__init__()
         # params weights
-        self.means = torch.zeros(L)
-        self.covariance = torch.eye(L)
+        self.means = torch.zeros(L).to(device)
+        self.covariance = torch.eye(L).to(device)
 
     @property
     def _probability(self):

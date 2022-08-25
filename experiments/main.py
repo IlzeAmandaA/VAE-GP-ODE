@@ -13,8 +13,6 @@ from model.misc.torch_utils import seed_everything
 from model.misc.settings import settings
 from model.core.initialization import initialize_and_fix_kernel_parameters
 
-# device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
 SOLVERS = ["dopri5", "bdf", "rk4", "midpoint", "adams", "explicit_adams", "fixed_adams"]
 parser = argparse.ArgumentParser('Learning human motion dynamics with GPODE')
 
