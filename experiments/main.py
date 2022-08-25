@@ -28,6 +28,8 @@ parser.add_argument('--q_diag', type=eval, default=False,
 parser.add_argument('--num_latents', type=int, default=5,
                     help="Number of latent dimensions for training")
 parser.add_argument('--trace', type=eval, default=True,
+                    help="Compute trace computation")
+parser.add_argument('--trace_loss', type=eval, default=True,
                     help="Use trace for loss computation")
 parser.add_argument('--kl_0', type=eval, default=False,
                     help="Specifies to set initial KL to 0")
@@ -119,8 +121,8 @@ if __name__ == '__main__':
     odegpvae = build_model(args)
     odegpvae.to(args.device)
     logger.info('********** Model Built {} ODE **********'.format(args.order))
-    logger.info('Model parameters: num features {} | num inducing {} | num epochs {} | lr {} | trace {} | kl_0 {} | order {} | D_in {} | D_out {} '.format(
-                    args.num_features, args.num_inducing, args.Nepoch,args.lr, args.trace, args.kl_0, args.order, args.D_in, args.D_out))
+    logger.info('Model parameters: num features {} | num inducing {} | num epochs {} | lr {} | trace computation {}| trace in loss {} | kl_0 {} | order {} | D_in {} | D_out {} '.format(
+                    args.num_features, args.num_inducing, args.Nepoch,args.lr, args.trace, args.trace_loss, args.kl_0, args.order, args.D_in, args.D_out))
 
     ########### initialize model #######
     odegpvae = initialize_and_fix_kernel_parameters(odegpvae, lengthscale_value=1.25, variance_value=0.5, fix=False)

@@ -6,6 +6,7 @@ from torch import nn
 from torch.nn import init
 
 from torch.distributions import Normal
+import gpflow
 
 prior_weights = Normal(0.0, 1.0)
 

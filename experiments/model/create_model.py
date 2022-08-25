@@ -66,10 +66,15 @@ def compute_loss(model, data, L, args):
     @param Ndata: number of training data points 
     @return: loss, nll, initial_state_kl, inducing_kl
     """
-    lhood, kl_z, logpL, log_pzt = model.build_lowerbound_terms(data, L, args)
+    # lhood, kl_z, logpL, log_pzt = model.build_lowerbound_terms(data, L, args)
+    lhood, logTrace, log_pzt = model.build_lowerbound_terms(data, L, args)
+    if args.trace_loss:
+        kl_rec = (logTrace - log_pzt).sum(2).mean(0).mean()
+    else:
+        kl_rec = -log_pzt.sum(2).mean()
     kl_u = model.build_kl() 
-    loss = - (lhood * args.Ndata - kl_z * args.Ndata - model.beta*kl_u) 
-    return loss, -lhood, kl_z, kl_u, logpL, log_pzt
+    loss = - (lhood * args.Ndata - kl_rec * args.Ndata - model.beta*kl_u) 
+    return loss, -lhood, kl_rec, kl_u, logTrace.sum(2).mean(), log_pzt.sum(2).mean()
 
 
 #min perspective (kl_z) --> best for kl_z to be 0 to neg

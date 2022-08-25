@@ -1,7 +1,5 @@
-from pipes import quote
 import torch
 import torch.nn as nn
-from model.misc.plot_utils import plot_latent_dynamics
 
 
 # model implementation
@@ -125,27 +123,24 @@ class ODEGPVAE(nn.Module):
 
         #dynamics
         if args.trace:
-            ztL, logpL = self.sample_trajectores_trace(z0,logp0,T,L,args.trace)
+            ztL, logTrace = self.sample_trajectores_trace(z0,logp0,T,L,args.trace)
         else:
             ztL = self.sample_trajectores(z0,logp0,T,L,args.trace)
-            logpL = torch.zeros((L,N,T), device=ztL.device)
+            logTrace = torch.zeros((L,N,T), device=ztL.device)
 
         #decode
         Xrec = self.build_decoding(ztL, (L,N,T,nc,d,d))
 
-        ##### compute loss terms ######
+        ##### loss terms ######
         #log p(z)
         log_pzt = self.prior.log_prob(ztL.contiguous().view([L*N*T,ztL.shape[-1]])) # L*N*T
         log_pzt = log_pzt.view([L,N,T]) # L,N,T
-        # kl_zt := KL[q(Z|X,f)||p(Z)]
-        kl_zt   = logpL - log_pzt  # L,N,T        
-        kl_z    = kl_zt.sum(2).mean(0) # N
         #ll
         loglik_L = self.likelihood.log_prob(X,Xrec,L) #L,N,T,d,nc,nc
         loglik = loglik_L.sum([2,3,4,5]).mean(0) #N
         
-        return loglik.mean(), kl_z.mean(), logpL.sum(2).mean(), log_pzt.sum(2).mean() #/ self.num_observations (N*T*D)
-    
+        return loglik.mean(), logTrace, log_pzt
+
     def forward(self, X, T_custom=None):
         [N,T,nc,d,d] = X.shape
         if T_custom:
