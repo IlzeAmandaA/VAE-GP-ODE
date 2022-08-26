@@ -64,6 +64,7 @@ def plot_latent_state(st_mu, show=False, fname='latent_dyanamics'):
     plt.xlabel('PCA-1',fontsize=15)
     plt.ylabel('PCA-2',fontsize=15)
     plt.title('Latent trajectories',fontsize=18)
+    plt.grid()
     plt.tight_layout()
     if show:
         plt.show()
@@ -108,7 +109,7 @@ def plot_trace(elbo_meter, nll_meter,  z_kl_meter, inducing_kl_meter, logpL_mete
     axs[0][1].set_title("Observation NLL")
     axs[0][1].grid()
     axs[1][0].plot(z_kl_meter.iters, z_kl_meter.vals)
-    axs[1][0].set_title("KL z (ode - p(z))")
+    axs[1][0].set_title("KL rec")
     axs[1][0].grid()
     axs[1][1].plot(inducing_kl_meter.iters,inducing_kl_meter.vals)
     axs[1][1].set_title("Inducing KL")

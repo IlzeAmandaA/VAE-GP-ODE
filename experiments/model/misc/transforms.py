@@ -48,9 +48,10 @@ class SoftPlus:
 
 
 class LowerTriangular:
-    def __init__(self, N, num_matrices=1):
+    def __init__(self, N, num_matrices=1, device='cpu'):
         self.N = N
         self.num_matrices = num_matrices  # We need to store this for reconstruction.
+        self.device = device
 
     def __str__(self):
         return 'Lower cholesky transformation'
@@ -68,7 +69,7 @@ class LowerTriangular:
         return np.vstack([y_i[ind] for y_i in y])
 
     def forward_tensor(self, x):
-        fwd = torch.zeros((self.num_matrices, self.N, self.N), dtype=settings.torch_float, device=settings.device)
+        fwd = torch.zeros((self.num_matrices, self.N, self.N), dtype=settings.torch_float, device=self.device)
         indices = np.tril_indices(self.N, 0)
         z = np.zeros(len(indices[0])).astype(int)
         for i in range(self.num_matrices):

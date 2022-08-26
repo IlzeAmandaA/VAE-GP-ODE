@@ -42,7 +42,7 @@ class DSVGP_Layer(torch.nn.Module):
                      }
     """
 
-    def __init__(self, D_in, D_out, M, S, q_diag=False, dimwise=True):
+    def __init__(self, D_in, D_out, M, S, q_diag=False, dimwise=True, device='cpu'):
         """
         @param D_in: Number of input dimensions 2q
         @param D_out: Number of output dimensions q
@@ -61,6 +61,7 @@ class DSVGP_Layer(torch.nn.Module):
         self.D_in = D_in
         self.M = M
         self.S = S
+        self.device = device
 
         self.inducing_loc = Param(np.random.normal(size=(M, D_in)), name='Inducing locations')  # (M,D_in)
         self.Um = Param(np.random.normal(size=(M, D_out)) * 1e-1, name='Inducing distribution (mean)')  # (M,D_out)
@@ -71,12 +72,8 @@ class DSVGP_Layer(torch.nn.Module):
                                  name='Inducing distribution (scale)')
         else:
             self.Us_sqrt = Param(np.stack([np.eye(M)] * D_out) * 1e-3,  # (D_out,M,M)
-                                 transform=transforms.LowerTriangular(M, D_out),
+                                 transform=transforms.LowerTriangular(M, D_out, device=self.device),
                                  name='Inducing distribution (scale)')
-
-    @property
-    def device(self):
-        return next(self.parameters()).device.type
 
     def sample_inducing(self):
         """
@@ -112,7 +109,7 @@ class DSVGP_Layer(torch.nn.Module):
         # compute th term nu = k(Z,Z)^{-1}(u-f(Z)) in whitened form of inducing variables
         # equation (13) from http://proceedings.mlr.press/v119/wilson20a/wilson20a.pdf
         Ku = self.kern.K(self.inducing_loc())  # (M,M) or (D,M,M)
-        Lu = torch.cholesky(Ku + torch.eye(self.M).to(self.device) * jitter)  # (M,M) or (D,M,M)
+        Lu = torch.linalg.cholesky(Ku + torch.eye(self.M).to(self.device) * jitter)  # (M,M) or (D,M,M)
         u_prior = self.rff_forward(self.inducing_loc())  # (M,D)
 
         if not self.dimwise:
