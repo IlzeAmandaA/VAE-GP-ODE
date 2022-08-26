@@ -42,20 +42,20 @@ def load_mnist_data(args, plot=True):
 		plt.close()
 	return trainset, testset
 
-def plot_mnist_recs(X,Xrec,idxs=[0,1,2,3,4],show=False,fname='reconstructions.png'):
-	if X.shape[0]<np.max(idxs):
-		idxs = np.arange(0,X.shape[0])
-	tt = X.shape[1]
-	plt.figure(2,(tt,3*len(idxs)))
-	for j, idx in enumerate(idxs):
-		for i in range(tt):
-			plt.subplot(2*len(idxs),tt,j*tt*2+i+1)
-			plt.imshow(np.reshape(X[idx,i,:],[28,28]), cmap='gray');
-			plt.xticks([]); plt.yticks([])
-		for i in range(tt):
-			plt.subplot(2*len(idxs),tt,j*tt*2+i+tt+1)
-			plt.imshow(np.reshape(Xrec[idx,i,:],[28,28]), cmap='gray');
-			plt.xticks([]); plt.yticks([])
-	plt.savefig(fname)
-	if show is False:
-		plt.close()
+# def plot_mnist_recs(X,Xrec,idxs=[0,1,2,3,4],show=False,fname='reconstructions.png'):
+# 	if X.shape[0]<np.max(idxs):
+# 		idxs = np.arange(0,X.shape[0])
+# 	tt = X.shape[1]
+# 	plt.figure(2,(tt,3*len(idxs)))
+# 	for j, idx in enumerate(idxs):
+# 		for i in range(tt):
+# 			plt.subplot(2*len(idxs),tt,j*tt*2+i+1)
+# 			plt.imshow(np.reshape(X[idx,i,:],[28,28]), cmap='gray');
+# 			plt.xticks([]); plt.yticks([])
+# 		for i in range(tt):
+# 			plt.subplot(2*len(idxs),tt,j*tt*2+i+tt+1)
+# 			plt.imshow(np.reshape(Xrec[idx,i,:],[28,28]), cmap='gray');
+# 			plt.xticks([]); plt.yticks([])
+# 	plt.savefig(fname)
+# 	if show is False:
+# 		plt.close()

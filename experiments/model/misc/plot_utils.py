@@ -3,6 +3,18 @@ import numpy as np
 import torch
 import os
 
+def plot_data(x, fname='plots/data.png', size=6):
+    X = x.detach().cpu().numpy()
+    plt.figure(1,(20,8))
+    for j in range(size):
+        for i in range(16):
+            plt.subplot(7,20,j*20+i+1)
+            plt.imshow(np.reshape(X[j,i,:],[28,28]), cmap='gray');
+            plt.xticks([]); plt.yticks([])
+    plt.savefig(fname)
+    plt.close()
+
+
 def plot_rollout(Xrec, show=False, fname='future.png'):
     [N, T, d, nc, nc] =Xrec.shape #3,48, 
     Xrecnp = Xrec.detach().cpu().numpy()

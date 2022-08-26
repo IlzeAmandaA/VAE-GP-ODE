@@ -202,6 +202,7 @@ if __name__ == '__main__':
     #plot longer rollouts 
     with torch.no_grad():
         test_batch = next(iter(testset))[:3,:].to(args.device) #sample 3 images
+        plot_data(test_batch, fname=os.path.join(args.save, 'plots/rollout_original.png'), size=3)
         Xrec_mu, test_mse = odegpvae(test_batch, args.Tlong*T)
         plot_rollout(Xrec_mu,fname=os.path.join(args.save, 'plots/rollout.png'))
 
