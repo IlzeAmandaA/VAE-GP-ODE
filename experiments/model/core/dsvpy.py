@@ -1,9 +1,10 @@
 from model.misc.param import Param
 from model.misc import transforms
-from model.core.kernels import RBF
+from model.core.kernels import RBF, DivergenceFreeKernel
 
 import numpy as np
 import torch
+import sys
 
 jitter = 1e-5
 
@@ -42,7 +43,7 @@ class DSVGP_Layer(torch.nn.Module):
                      }
     """
 
-    def __init__(self, D_in, D_out, M, S, q_diag=False, dimwise=True, device='cpu'):
+    def __init__(self, D_in, D_out, M, S, q_diag=False, dimwise=True, device='cpu', kernel='RBF'):
         """
         @param D_in: Number of input dimensions 2q
         @param D_out: Number of output dimensions q
@@ -53,7 +54,12 @@ class DSVGP_Layer(torch.nn.Module):
         """
         super(DSVGP_Layer, self).__init__()
 
-        self.kern = RBF(D_in, D_out, dimwise)
+        if kernel == 'RBF':
+            self.kern = RBF(D_in, D_out, dimwise) 
+        elif kernel == 'DF':
+            self.kern = DivergenceFreeKernel(D_in, D_out, dimwise)
+        else:
+            sys.exit('Invalid kernel selection')
         self.q_diag = q_diag
         self.dimwise = dimwise
 

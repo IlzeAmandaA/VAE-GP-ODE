@@ -1,4 +1,3 @@
-from experiments.model.misc.transforms import Identity
 from model.misc.constraint_utils import softplus, invsoftplus
 
 import numpy as np
@@ -7,7 +6,6 @@ from torch import nn
 from torch.nn import init
 
 from torch.distributions import Normal
-import gpflow
 
 prior_weights = Normal(0.0, 1.0)
 
@@ -121,14 +119,6 @@ class DivergenceFreeKernel(RBF):
     def __init__(self, D_in, D_out, dimwise=False):
         super(DivergenceFreeKernel, self).__init__(D_in=D_in, D_out=D_out,dimwise=dimwise)
 
-    @property
-    def num_latent_gps(self):
-        pass
-
-    @property
-    def latent_kernels(self):
-        pass
-
     def difference_matrix(self, X, X2=None):
         '''
         Computes (X-X2)
@@ -136,7 +126,8 @@ class DivergenceFreeKernel(RBF):
         X = X / self.lengthscales  # (N,D_in)
         if X2 is None:
             X2=X
-        X2 = X2 / self.lengthscales# (M,D_in)
+        else:
+            X2 = X2 / self.lengthscales# (M,D_in)
         return X[:,None,:] - X2[None,:,:] #broadcasting rules (M,N, D_in)
 
     def difference_matrix_dimwise(self, X, X2=None):
@@ -146,14 +137,15 @@ class DivergenceFreeKernel(RBF):
         X = X.unsqueeze(0) / self.lengthscales.unsqueeze(1)  # (D_out,N,D_in)
         if X2 is None:
             X2=X
-        X2 = X2.unsqueeze(0) / self.lengthscales.unsqueeze(1)  # (D_out,M,D_in)
+        else:
+            X2 = X2.unsqueeze(0) / self.lengthscales.unsqueeze(1)  # (D_out,M,D_in)
         return X[:,:,None,:] - X2[:,None,:,:] #broadcasting rules (D_out, M, N, D_in)
     
     def identity(self, X, X2=None):
         if X2 is None:
-            return torch.eye(X.shape[0])
+            return torch.eye(X.shape[0]).to(X.device)
         else:
-            return torch.eye(X2.shape[0])
+            return torch.eye(X2.shape[0]).to(X2.device)
 
     def K(self, X, X2=None):
         """

@@ -21,7 +21,8 @@ def build_model(args):
                      S=args.num_features,
                      dimwise=args.dimwise,
                      q_diag=args.q_diag,
-                     device= args.device)
+                     device= args.device,
+                     kernel = args.kernel)
 
     flow = Flow(diffeq=gp, order=args.order, solver=args.solver, use_adjoint=args.use_adjoint)
 

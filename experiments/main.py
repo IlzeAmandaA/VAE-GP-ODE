@@ -14,6 +14,7 @@ from model.misc.settings import settings
 from model.core.initialization import initialize_and_fix_kernel_parameters
 
 SOLVERS = ["dopri5", "bdf", "rk4", "midpoint", "adams", "explicit_adams", "fixed_adams"]
+KERNELS = ['RBF', 'DF']
 parser = argparse.ArgumentParser('Learning human motion dynamics with GPODE')
 
 # model parameters
@@ -75,6 +76,8 @@ parser.add_argument('--use_adjoint', type=eval, default=False,
                     help="Use adjoint method for gradient computation")
 parser.add_argument('--beta', type=int, default=1,
                     help="Factor to scale the inducing KL loss effect")
+parser.add_argument('--kernel', type=str, default='RBF', choices=KERNELS,
+                    help="ODE solver for numerical integration")
 
 # training arguments
 parser.add_argument('--Nepoch', type=int, default=500, #10_000
@@ -89,7 +92,7 @@ parser.add_argument('--seed', type=int, default=121,
                     help="Global seed for the training run")
 parser.add_argument('--log_freq', type=int, default=5,
                     help="Logging frequency while training")
-parser.add_argument('--device', type=str, default='cpu',
+parser.add_argument('--device', type=str, default='cuda:0',
                     help="device")
 
 #plotting arguments
@@ -121,8 +124,8 @@ if __name__ == '__main__':
     odegpvae = build_model(args)
     odegpvae.to(args.device)
     logger.info('********** Model Built {} ODE **********'.format(args.order))
-    logger.info('Model parameters: num features {} | num inducing {} | num epochs {} | lr {} | trace computation {}| trace in loss {} | kl_0 {} | order {} | D_in {} | D_out {} '.format(
-                    args.num_features, args.num_inducing, args.Nepoch,args.lr, args.trace, args.trace_loss, args.kl_0, args.order, args.D_in, args.D_out))
+    logger.info('Model parameters: num features {} | num inducing {} | num epochs {} | lr {} | trace computation {}| trace in loss {} | kl_0 {} | order {} | D_in {} | D_out {} | beta {}'.format(
+                    args.num_features, args.num_inducing, args.Nepoch,args.lr, args.trace, args.trace_loss, args.kl_0, args.order, args.D_in, args.D_out, args.beta))
 
     ########### initialize model #######
     odegpvae = initialize_and_fix_kernel_parameters(odegpvae, lengthscale_value=1.25, variance_value=0.5, fix=False)
