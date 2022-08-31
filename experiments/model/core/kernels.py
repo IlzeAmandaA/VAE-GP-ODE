@@ -1,3 +1,4 @@
+from experiments.model.misc.transforms import Identity
 from model.misc.constraint_utils import softplus, invsoftplus
 
 import numpy as np
@@ -130,47 +131,31 @@ class DivergenceFreeKernel(RBF):
 
     def difference_matrix(self, X, X2=None):
         '''
-        Computes (X-X2^T)
+        Computes (X-X2)
         '''
         X = X / self.lengthscales  # (N,D_in)
         if X2 is None:
             X2=X
-            diff = X[..., :, None,:]-X2[...,None,:,:]  # (N,N,D_in)
-            return diff
-        X2 = X2 / self.lengthscales  # (M,D_in)
-        Xshape = X.shape
-        X2shape = X2.shape
-        X = torch.reshape(X, (-1, Xshape[-1]))
-        X2 = torch.reshape(X2, (-1, X2shape[-1]))
-        diff = X[:,None, :] - X2[None, :, :]
-        diff = torch.reshape(diff, (list(Xshape[:-1]) + list(X2shape[:-1]) + list([Xshape[-1]]))) #N, M, D_in
-        return diff
+        X2 = X2 / self.lengthscales# (M,D_in)
+        return X[:,None,:] - X2[None,:,:] #broadcasting rules (M,N, D_in)
 
     def difference_matrix_dimwise(self, X, X2=None):
         '''
-        Computes (X-X2^T)
+        Computes (X-X2)
         '''
         X = X.unsqueeze(0) / self.lengthscales.unsqueeze(1)  # (D_out,N,D_in)
         if X2 is None:
             X2=X
-            diff = X[..., :, None,:]-X2[...,None,:,:]  # (D_out,M,D_in)
-            return diff
         X2 = X2.unsqueeze(0) / self.lengthscales.unsqueeze(1)  # (D_out,M,D_in)
-        Xshape = X.shape
-        X2shape = X2.shape
-        X = torch.reshape(X, (-1, Xshape[-1]))
-        X2 = torch.reshape(X2, (-1, X2shape[-1]))
-        diff = X[:,None, :] - X2[None, :, :]
-        diff = torch.reshape(diff, (list(Xshape[:-1]) + list(X2shape[:-1]) + list([Xshape[-1]]))) #D_out, N, D_out, M, D_in
-        return diff
+        return X[:,:,None,:] - X2[:,None,:,:] #broadcasting rules (D_out, M, N, D_in)
     
     def identity(self, X, X2=None):
         if X2 is None:
-            return torch.eye(self.D_out).unsqueeze(0).repeat(X.shape[0], X.shape[0], 1, 1)
+            return torch.eye(X.shape[0])
         else:
-            return torch.eye(self.D_out).unsqueeze(0).repeat(X.shape[0], X2.shape[0], 1, 1)
+            return torch.eye(X2.shape[0])
 
-    def K(self, X, X2=None, full_output_cov=True):
+    def K(self, X, X2=None):
         """
         Computes K(X, X_2)
         @param X: Input 1 (N,D_in)
@@ -178,41 +163,35 @@ class DivergenceFreeKernel(RBF):
         @return: Tensor (D,N,M) if dimwise else (N,M)
         """
         if self.dimwise:
-            sq_dist = self.square_dist_dimwise(X, X2)  # (D_out,N,M)
-            diff = self.difference_matrix_dimwise(X, X2)  #D_out, N, D_out, M, D_in
-            diff1 = torch.unsqueeze(diff, -1) 
-            diff2 = torch.permute(torch.unsqueeze(diff, -1), (0,1,2,3,5,4)) 
-            K1_term = diff1 @ diff2 #D_out, N, D_out, M, D_in, D_in
+            sq_dist = self.square_dist_dimwise(X, X2) # (D_out, M,N)
+            K2 = torch.exp(-0.5 * sq_dist) # (D_out, M,N)
+            K2 = K2.unsqueeze(0) # (1, D_out,M,N)
+            diff = self.difference_matrix_dimwise(X, X2) #(D_out, M,N,D_in)
+            diff1 = torch.permute(diff, (0,1,3,2)) # (D_out,M, D_in, N)
+            K1_term = torch.einsum('dmni, dmin -> idmn', diff, diff1) # (D_in, D_out,M,N) #TODO not sure if this is correct
+            K3 = (16 - 1.0) - sq_dist # (D_out,M,N)
+            K3 = K3 @ self.identity(X,X2) # D_out,M,N
+            K3 = K3.unsqueeze(0) # 1,D_out,M, N
+            K = (K1_term + K3) * K2 # D_in,D_out, M, N
+            K = torch.permute(K,(1,2,3,0)) # D_out,M,N,D_in
+            l2 = torch.permute((1.0/torch.pow(self.lengthscales,2)), (1,0))
         else:
+            #works for both, when X2 val and X2=None 
             sq_dist = self.square_dist(X, X2)  # (N,M)
-            diff = self.difference_matrix(X, X2) #N, M, D_in
-            diff1 = torch.unsqueeze(diff, -1) #N,M,D_in,1
-            diff2 = torch.permute(torch.unsqueeze(diff, -1), (0,1,3,2)) #N,M,1,D_in
-            K1_term = diff1 @ diff2 # N,M,D_in,D_in
+            K2 = torch.exp(-0.5 * sq_dist) # (M,N)
+            K2 = K2.unsqueeze(0) # (1,M,N)
+            diff = self.difference_matrix(X, X2) #(M,N,D_in)
+            diff1 = torch.permute(diff, (0,2,1)) # (M, D_in, N)
+            K1_term = torch.einsum('mnd, mdn -> dmn', diff, diff1) # (D_in,M,N)
+            K3 = (16 - 1.0) - sq_dist # (M,N)
+            K3 = K3 @ self.identity(X,X2) # M,N
+            K3 = K3.unsqueeze(0) # 1, M, N
+            K = (K1_term + K3) * K2 # D_in, M, N
+            K = torch.permute(K,(1,2,0)) # M,N,D_in
+            l2 = torch.permute((1.0/torch.pow(self.lengthscales,2).unsqueeze(0)), (1,0))
+
+        K = K @ l2
+        K = K @ self.variance.unsqueeze(-1)
+        return K.squeeze()
 
 
-        # dist = square_distance(self.scale(X), self.scale(X2))
-        K2 = torch.exp(-0.5 * sq_dist)
-        # K2 = tf.exp(0.5 * -dist)
-        # K2 = tf.expand_dims(tf.expand_dims(K2, -1), -1)
-
-
-        K3 = self.D_out - 1.0 - sq_dist #D_out, N,M if dimwise else N,M
-        K3 = K3.unsqueeze(-1).unsqueeze(-1)
-        K3 = K3 * self.identity(X,X2)
-
-        K = (K1_term + K3) * K2
-        K = (self.variance / torch.pow(self.lengthscale,2)) * K
-
-        if full_output_cov:
-            return tf.transpose(K, [0, 2, 1, 3])
-        else:
-            K = tf.linalg.diag_part(K)
-            return tf.transpose(K, [2, 0, 1])
-
-    def K_diag(self, X, full_output_cov=True):
-        if full_output_cov:
-            return self.K(X, full_output_cov=full_output_cov)
-        else:
-            k = self.K(X, full_output_cov=full_output_cov)
-            return tf.transpose(tf.linalg.diag_part(k))
