@@ -3,9 +3,11 @@ import time
 from datetime import timedelta
 import argparse
 import torch
+import sys
 from datetime import datetime
 from data.wrappers import load_data
 from model.create_model import build_model, compute_loss
+from model.create_plots import plot_results
 from model.misc.plot_utils import *
 from model.misc import io_utils
 from model.misc import log_utils 
@@ -124,8 +126,8 @@ if __name__ == '__main__':
     odegpvae = build_model(args)
     odegpvae.to(args.device)
     logger.info('********** Model Built {} ODE **********'.format(args.order))
-    logger.info('Model parameters: num features {} | num inducing {} | num epochs {} | lr {} | trace computation {}| trace in loss {} | kl_0 {} | order {} | D_in {} | D_out {} | beta {}'.format(
-                    args.num_features, args.num_inducing, args.Nepoch,args.lr, args.trace, args.trace_loss, args.kl_0, args.order, args.D_in, args.D_out, args.beta))
+    logger.info('Model parameters: num features {} | num inducing {} | num epochs {} | lr {} | trace computation {}| trace in loss {} | kl_0 {} | order {} | D_in {} | D_out {} | beta {} | kernel {}'.format(
+                    args.num_features, args.num_inducing, args.Nepoch,args.lr, args.trace, args.trace_loss, args.kl_0, args.order, args.D_in, args.D_out, args.beta, args.kernel))
 
     ########### initialize model #######
     odegpvae = initialize_and_fix_kernel_parameters(odegpvae, lengthscale_value=1.25, variance_value=0.5, fix=False)
@@ -153,6 +155,16 @@ if __name__ == '__main__':
         for itr,local_batch in enumerate(trainset):
             minibatch = local_batch.to(args.device) # B x T x 1 x 28 x 28 (batch, time, image dim)
             loss, nlhood, kl_reg, kl_u, logpL, log_pzt = compute_loss(odegpvae, minibatch, L, args)
+            if torch.isnan(loss):
+                logger.info('************** Obtained nan Loss at Iter:  {:<2d}*************'.format(itr))
+                logger.info('Laoding previous model for plotting')
+                fname = os.path.join(args.save, 'odegpvae_mnist.pth')
+                odegpvae = build_model(args)
+                odegpvae.load_state_dict(torch.load(fname,map_location=torch.device(args.device)))
+                odegpvae.eval()
+                plot_results(odegpvae, trainset, testset, args, elbo_meter, nll_meter, reg_kl_meter, inducing_kl_meter, logpL_meter, logztL_meter)
+                sys.exit()
+
             if args.kl_0:
                 kl_reg = kl_reg * 0.0
                 kl_u = kl_u * 0.0
@@ -194,18 +206,5 @@ if __name__ == '__main__':
     logger.info("Kernel lengthscales {}".format(odegpvae.flow.odefunc.diffeq.kern.lengthscales.data))
     logger.info("Kernel variance {}".format(odegpvae.flow.odefunc.diffeq.kern.variance.data))
 
-    #visualize latent dynamics with pca 
-    with torch.no_grad():
-        plot_latent_dynamics(odegpvae, next(iter(trainset)).to(args.device), args, fname=os.path.join(args.save, 'plots/dynamics_train'))
-        plot_latent_dynamics(odegpvae, next(iter(testset)).to(args.device), args, fname=os.path.join(args.save, 'plots/dynamics_test'))
-
-    #plot loss
-    plot_trace(elbo_meter, nll_meter, reg_kl_meter, inducing_kl_meter, logpL_meter, logztL_meter, args)
-
-    #plot longer rollouts 
-    with torch.no_grad():
-        test_batch = next(iter(testset))[:3,:].to(args.device) #sample 3 images
-        plot_data(test_batch, fname=os.path.join(args.save, 'plots/rollout_original.png'), size=3)
-        Xrec_mu, test_mse = odegpvae(test_batch, args.Tlong*T)
-        plot_rollout(Xrec_mu,fname=os.path.join(args.save, 'plots/rollout.png'))
+    plot_results(odegpvae, trainset, testset, args, elbo_meter, nll_meter, reg_kl_meter, inducing_kl_meter, logpL_meter, logztL_meter)
 

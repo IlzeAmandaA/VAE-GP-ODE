@@ -38,7 +38,7 @@ class ODEfunc(nn.Module):
             dvs = self.diffeq(vs) # 25,2q
             ddvi_dvi = torch.stack(
                         [torch.autograd.grad(dvs[:,i],vs,torch.ones_like(dvs[:,i]),
-                        retain_graph=True,create_graph=True)[0].contiguous()[:,i]
+                        create_graph=True)[0].contiguous()[:,i]
                         for i in range(q)],1) # N,q --> df(x)_i/dx_i, i=1..q
             tr_ddvi_dvi = torch.sum(ddvi_dvi,1) # N
             return (dvs, -tr_ddvi_dvi)
@@ -56,7 +56,7 @@ class ODEfunc(nn.Module):
             dvs = torch.cat([dv,ds],1) # N,2q
             ddvi_dvi = torch.stack(
                         [torch.autograd.grad(dv[:,i],vs,torch.ones_like(dv[:,i]),
-                        retain_graph=True,create_graph=True)[0].contiguous()[:,i]
+                        create_graph=True)[0].contiguous()[:,i]
                         for i in range(q)],1) # N,q --> df(x)_i/dx_i, i=1..q
             tr_ddvi_dvi = torch.sum(ddvi_dvi,1) # N
             return (dvs, -tr_ddvi_dvi)
