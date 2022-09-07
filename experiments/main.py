@@ -31,13 +31,17 @@ parser.add_argument('--q_diag', type=eval, default=False,
 parser.add_argument('--num_latents', type=int, default=5,
                     help="Number of latent dimensions for training")
 parser.add_argument('--trace', type=eval, default=True,
-                    help="Compute trace computation")
-parser.add_argument('--trace_loss', type=eval, default=True,
-                    help="Use trace for loss computation")
+                    help="Compute trace")
 parser.add_argument('--kl_0', type=eval, default=False,
                     help="Specifies to set initial KL to 0")
 parser.add_argument('--order', type=int, default=2,
                     help="order of ODE")
+parser.add_argument('--continue_training', type=eval, default=False,
+                    help="If set to True continoues training of a previous model")
+parser.add_argument('--model_path', type=str, default='None',
+                    help="path from where to load previous model, should be of the form results/mnist_*/*.pth")
+
+
 
 # data processing arguments
 parser.add_argument('--data_root', type=str, default='data/',
@@ -125,12 +129,17 @@ if __name__ == '__main__':
     ########### model ###########
     odegpvae = build_model(args)
     odegpvae.to(args.device)
-    logger.info('********** Model Built {} ODE **********'.format(args.order))
-    logger.info('Model parameters: num features {} | num inducing {} | num epochs {} | lr {} | trace computation {}| trace in loss {} | kl_0 {} | order {} | D_in {} | D_out {} | beta {} | kernel {}'.format(
-                    args.num_features, args.num_inducing, args.Nepoch,args.lr, args.trace, args.trace_loss, args.kl_0, args.order, args.D_in, args.D_out, args.beta, args.kernel))
-
-    ########### initialize model #######
     odegpvae = initialize_and_fix_kernel_parameters(odegpvae, lengthscale_value=1.25, variance_value=0.5, fix=False)
+
+    logger.info('********** Model Built {} ODE **********'.format(args.order))
+    logger.info('Model parameters: num features {} | num inducing {} | num epochs {} | lr {} | trace computation {}| kl_0 {} | order {} | D_in {} | D_out {} | beta {} | kernel {} | latent_dim {}'.format(
+                    args.num_features, args.num_inducing, args.Nepoch,args.lr, args.trace, args.kl_0, args.order, args.D_in, args.D_out, args.beta, args.kernel, args.q))
+
+    if args.continue_learning:
+        fname = os.path.join(os.path.abspath(os.path.dirname(__file__)), args.model_path)
+        odegpvae.load_state_dict(torch.load(fname,map_location=torch.device(args.device)))
+        logger.info('Resume training for model {}'.format(fname))
+
 
     ########### log loss values ########
     elbo_meter = log_utils.CachedRunningAverageMeter(10)
@@ -156,12 +165,15 @@ if __name__ == '__main__':
             minibatch = local_batch.to(args.device) # B x T x 1 x 28 x 28 (batch, time, image dim)
             loss, nlhood, kl_reg, kl_u, logpL, log_pzt = compute_loss(odegpvae, minibatch, L, args)
             if torch.isnan(loss):
-                logger.info('************** Obtained nan Loss at Iter:  {:<2d}*************'.format(itr))
+                logger.info('************** Obtained nan Loss at Epoch:{:4d}/{:4d}*************'.format(ep, args.Nepoch))
                 logger.info('Laoding previous model for plotting')
                 fname = os.path.join(args.save, 'odegpvae_mnist.pth')
                 odegpvae = build_model(args)
+                odegpvae.to(args.device)
                 odegpvae.load_state_dict(torch.load(fname,map_location=torch.device(args.device)))
                 odegpvae.eval()
+                logger.info("Kernel lengthscales {}".format(odegpvae.flow.odefunc.diffeq.kern.lengthscales.data))
+                logger.info("Kernel variance {}".format(odegpvae.flow.odefunc.diffeq.kern.variance.data))
                 plot_results(odegpvae, trainset, testset, args, elbo_meter, nll_meter, reg_kl_meter, inducing_kl_meter, logpL_meter, logztL_meter)
                 sys.exit()
 

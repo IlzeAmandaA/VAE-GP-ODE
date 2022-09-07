@@ -70,7 +70,7 @@ def compute_loss(model, data, L, args):
     """
     # lhood, kl_z, logpL, log_pzt = model.build_lowerbound_terms(data, L, args)
     lhood, logTrace, log_pzt = model.build_lowerbound_terms(data, L, args)
-    if args.trace_loss:
+    if args.trace:
         kl_rec = (logTrace - log_pzt).sum(2).mean(0).mean()
     else:
         kl_rec = -log_pzt.sum(2).mean()
