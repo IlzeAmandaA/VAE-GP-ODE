@@ -161,7 +161,7 @@ class DivergenceFreeKernel(RBF):
             diff = self.difference_matrix_dimwise(X, X2) #(D_out, M,N,D_in)
             diff1 = torch.permute(diff, (0,1,3,2)) # (D_out,M, D_in, N)
             K1_term = torch.einsum('dmni, dmin -> idmn', diff, diff1) # (D_in, D_out,M,N) #TODO not sure if this is correct
-            K3 = (16 - 1.0) - sq_dist # (D_out,M,N)
+            K3 = (self.D_in - 1.0) - sq_dist # (D_out,M,N)
             K3 = K3 @ self.identity(X,X2) # D_out,M,N
             K3 = K3.unsqueeze(0) # 1,D_out,M, N
             K = (K1_term + K3) * K2 # D_in,D_out, M, N
@@ -175,7 +175,7 @@ class DivergenceFreeKernel(RBF):
             diff = self.difference_matrix(X, X2) #(M,N,D_in)
             diff1 = torch.permute(diff, (0,2,1)) # (M, D_in, N)
             K1_term = torch.einsum('mnd, mdn -> dmn', diff, diff1) # (D_in,M,N)
-            K3 = (16 - 1.0) - sq_dist # (M,N)
+            K3 = (self.D_in - 1.0) - sq_dist # (M,N)
             K3 = K3 @ self.identity(X,X2) # M,N
             K3 = K3.unsqueeze(0) # 1, M, N
             K = (K1_term + K3) * K2 # D_in, M, N
