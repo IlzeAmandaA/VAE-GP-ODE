@@ -88,7 +88,7 @@ parser.add_argument('--kernel', type=str, default='RBF', choices=KERNELS,
 # training arguments
 parser.add_argument('--Nepoch', type=int, default=500, #10_000
                     help="Number of gradient steps for model training")
-parser.add_argument('--lr', type=float, default=0.005,
+parser.add_argument('--lr', type=float, default=0.001,
                     help="Learning rate for model training")
 parser.add_argument('--eval_sample_size', type=int, default=128,
                     help="Number of posterior samples to evaluate the model predictive performance")
@@ -135,7 +135,7 @@ if __name__ == '__main__':
     logger.info('Model parameters: num features {} | num inducing {} | num epochs {} | lr {} | trace computation {}| kl_0 {} | order {} | D_in {} | D_out {} | beta {} | kernel {} | latent_dim {}'.format(
                     args.num_features, args.num_inducing, args.Nepoch,args.lr, args.trace, args.kl_0, args.order, args.D_in, args.D_out, args.beta, args.kernel, args.q))
 
-    if args.continue_learning:
+    if args.continue_training:
         fname = os.path.join(os.path.abspath(os.path.dirname(__file__)), args.model_path)
         odegpvae.load_state_dict(torch.load(fname,map_location=torch.device(args.device)))
         logger.info('Resume training for model {}'.format(fname))
