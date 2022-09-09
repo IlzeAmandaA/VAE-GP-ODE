@@ -7,6 +7,15 @@ import matplotlib.pyplot as plt
 plt.switch_backend('agg')
 from .utils import Dataset
 
+def rot_start(Xtr, T, N ):
+	start_angle = np.random.randint(0,T,N)
+	X_angle = []
+	for n in range(N):
+		start = Xtr[n,start_angle[n]:,:,:,:]
+		end = torch.flip(Xtr[n,1:start_angle[n]+1,:,:,:],dims=(1,))
+		new_X = torch.cat((start,end), dim=0).unsqueeze(0)
+		X_angle.append(new_X)
+	return torch.cat(X_angle,dim=0)
 
 
 def load_mnist_data(args, plot=True):
@@ -22,6 +31,10 @@ def load_mnist_data(args, plot=True):
 	T = args.T #16
 	Xtr   = torch.tensor(X[:N],dtype=torch.float32).view([N,T,1,28,28])
 	Xtest = torch.tensor(X[N:],dtype=torch.float32).view([-1,T,1,28,28])
+
+	if args.rotrand:
+		Xtr = rot_start(Xtr,T,N)
+		Xtest = rot_start(Xtest, T, Xtest.shape[0])
 
 	# Generators
 	params = {'batch_size': args.batch, 'shuffle': True, 'num_workers': 2} #25
@@ -41,21 +54,3 @@ def load_mnist_data(args, plot=True):
 		plt.savefig(os.path.join(args.save, 'plots/data.png'))
 		plt.close()
 	return trainset, testset
-
-# def plot_mnist_recs(X,Xrec,idxs=[0,1,2,3,4],show=False,fname='reconstructions.png'):
-# 	if X.shape[0]<np.max(idxs):
-# 		idxs = np.arange(0,X.shape[0])
-# 	tt = X.shape[1]
-# 	plt.figure(2,(tt,3*len(idxs)))
-# 	for j, idx in enumerate(idxs):
-# 		for i in range(tt):
-# 			plt.subplot(2*len(idxs),tt,j*tt*2+i+1)
-# 			plt.imshow(np.reshape(X[idx,i,:],[28,28]), cmap='gray');
-# 			plt.xticks([]); plt.yticks([])
-# 		for i in range(tt):
-# 			plt.subplot(2*len(idxs),tt,j*tt*2+i+tt+1)
-# 			plt.imshow(np.reshape(Xrec[idx,i,:],[28,28]), cmap='gray');
-# 			plt.xticks([]); plt.yticks([])
-# 	plt.savefig(fname)
-# 	if show is False:
-# 		plt.close()

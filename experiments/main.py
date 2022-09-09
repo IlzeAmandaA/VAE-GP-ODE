@@ -17,7 +17,7 @@ from model.core.initialization import initialize_and_fix_kernel_parameters
 
 SOLVERS = ["dopri5", "bdf", "rk4", "midpoint", "adams", "explicit_adams", "fixed_adams"]
 KERNELS = ['RBF', 'DF']
-parser = argparse.ArgumentParser('Learning human motion dynamics with GPODE')
+parser = argparse.ArgumentParser('Learning latent dyanmics with OdeVaeGP')
 
 # model parameters
 parser.add_argument('--num_features', type=int, default=256,
@@ -60,6 +60,8 @@ parser.add_argument('--T', type=int, default=16,
                     help="Number of time points")
 parser.add_argument('--Ndata', type=int, default=500,
                     help="Number training data points")
+parser.add_argument('--rotrand', type=eval, default=False,
+                    help="if True multiple initial rotatio angles")
 
 #vae arguments
 parser.add_argument('--q', type=int, default=8,
