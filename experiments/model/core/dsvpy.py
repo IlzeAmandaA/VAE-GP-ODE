@@ -6,7 +6,7 @@ import numpy as np
 import torch
 import sys
 
-jitter = 1e-5
+
 
 def sample_normal(shape, seed=None):
     # sample from standard Normal with a given shape
@@ -56,13 +56,16 @@ class DSVGP_Layer(torch.nn.Module):
 
         if kernel == 'RBF':
             self.kern = RBF(D_in, D_out, dimwise) 
+            self.dimwise = dimwise
+            
         elif kernel == 'DF':
-            self.kern = DivergenceFreeKernel(D_in, D_out, dimwise)
+            self.kern = DivergenceFreeKernel(D_in, D_out)
+            self.dimwise = False
         else:
             sys.exit('Invalid kernel selection')
-        self.q_diag = q_diag
-        self.dimwise = dimwise
 
+        self.kernel_n = kernel
+        self.q_diag = q_diag
         self.D_out = D_out
         self.D_in = D_in
         self.M = M
@@ -104,44 +107,17 @@ class DSVGP_Layer(torch.nn.Module):
         3. Intermediate computations based on the inducing sample for pathwise update
         """
         # generate parameters required for the Fourier feature maps
-        self.rff_weights = sample_normal((self.S, self.D_out)).to(self.device)  # (S,D_out)
-        self.rff_omega = self.kern.sample_freq(self.S, device=self.device)  # (D_in,S) or (D_in,S,D_out)
-        phase_shape = (1, self.S, self.D_out) if self.dimwise else (1, self.S)
-        self.rff_phase = sample_uniform(phase_shape).to(self.device) * 2 * np.pi  # (S,D_out)
+        self.kern.build_cache(self.S, self.device)        
 
         # generate sample from the inducing posterior
-        inducing_val = self.sample_inducing()  # (M,D)
+        inducing_val = self.sample_inducing()  # (M,D_out)
 
         # compute th term nu = k(Z,Z)^{-1}(u-f(Z)) in whitened form of inducing variables
         # equation (13) from http://proceedings.mlr.press/v119/wilson20a/wilson20a.pdf
-        Ku = self.kern.K(self.inducing_loc())  # (M,M) or (D,M,M)
-        Lu = torch.linalg.cholesky(Ku + torch.eye(self.M).to(self.device) * jitter)  # (M,M) or (D,M,M)
-        u_prior = self.rff_forward(self.inducing_loc())  # (M,D)
+        Ku = self.kern.K(self.inducing_loc())  # (M,M) or (D,M,M) or (M,M,D_in,D_in) / (MD_in,MD_in)
+        u_prior = self.kern.rff_forward(self.inducing_loc(), self.S)  # (M,D)
 
-        if not self.dimwise:
-            nu = torch.triangular_solve(u_prior, Lu, upper=False)[0]  # (M,D)
-            nu = torch.triangular_solve((inducing_val - nu),
-                                        Lu.T, upper=True)[0]  # (M,D)
-        else:
-            nu = torch.triangular_solve(u_prior.T.unsqueeze(2), Lu, upper=False)[0]  # (D,M,1)
-            nu = torch.triangular_solve((inducing_val.T.unsqueeze(2) - nu),
-                                        Lu.permute(0, 2, 1), upper=True)[0]  # (D,M,1)
-        self.nu = nu  # (D,M)
-
-    def rff_forward(self, x):
-        """
-        Calculates samples from the GP prior with random Fourier Features
-        @param x: input tensor (N,D)
-        @return: function values (N,D_out)
-        """
-        # compute feature map
-        xo = torch.einsum('nd,dfk->nfk' if self.dimwise else 'nd,df->nf', x, self.rff_omega)  # (N,S) or (N,S,D_in)
-        phi_ = torch.cos(xo + self.rff_phase)  # (N,S) or (N,S,D_in)
-        phi = phi_ * torch.sqrt(self.kern.variance / self.S)  # (N,S) or (N,S,D_in)
-
-        # compute function values
-        f = torch.einsum('nfk,fk->nk' if self.dimwise else 'nf,fd->nd', phi, self.rff_weights)  # (N,D_out)
-        return f  # (N,D_out)
+        self.kern.compute_nu(Ku, u_prior,inducing_val)
 
     def forward(self, x):
         """
@@ -154,20 +130,23 @@ class DSVGP_Layer(torch.nn.Module):
         @return: f(x) where f is a sample from GP posterior
         """
         # generate a prior sample using rff
-        f_prior = self.rff_forward(x)  # (N,D)) N,2q
+        f_prior = self.kern.rff_forward(x, self.S)
 
-        # compute pathwise updates
-        if not self.dimwise:
-            Kuf = self.kern.K(self.inducing_loc(), x)  # (M,N)
-            f_update = torch.einsum('md, mn -> nd', self.nu, Kuf)  # (N,D)
-        else:
-            Kuf = self.kern.K(self.inducing_loc(), x)  # (D,M,N)
-            f_update = torch.einsum('dm, dmn -> nd', self.nu.squeeze(2), Kuf)  # (N,D)
+        # compute pathwise updates 
+        f_update = self.kern.f_update(x, self.inducing_loc())
 
         # sample from the GP posterior
-        dx = f_prior + f_update  # (N,D)
+        if self.kernel_n == 'DF':
+           # print('fprior', f_prior[0,0:10])
+            f_prior = torch.reshape(f_prior, (x.shape[0],self.D_in, self.D_out, self.D_in))
+           # print('fupdate', f_update[0,0:10])
+            f_update = torch.reshape(f_update, (x.shape[0],self.D_in, self.D_out, self.D_in))
+            dx = torch.einsum('nidj, nidj -> nd', f_prior, f_update)
+        else:
+            dx = f_prior + f_update 
 
-        return dx  # (N,D) N,q 
+       # print(dx[0,:])
+        return dx  # (N,D_out)
 
     def kl(self):
         """

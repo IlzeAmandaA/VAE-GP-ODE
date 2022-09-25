@@ -8,11 +8,22 @@ from torch.nn import init
 from torch.distributions import Normal
 
 prior_weights = Normal(0.0, 1.0)
-
+jitter = 1e-5
 
 def sample_normal(shape, seed=None):
+    '''
+    Draw samples from a normal (Gaussian) distribution 
+    '''
     rng = np.random.RandomState() if seed is None else np.random.RandomState(seed)
     return torch.tensor(rng.normal(size=shape).astype(np.float32))
+
+def sample_uniform(shape, seed=None):
+    # random Uniform sample of a given shape
+    if seed is not None:
+        rng = np.random.RandomState(seed)
+        return torch.tensor(rng.uniform(low=0.0, high=1.0, size=shape).astype(np.float32))
+    else:
+        return torch.tensor(np.random.uniform(low=0.0, high=1.0, size=shape).astype(np.float32))
 
 
 class RBF(torch.nn.Module):
@@ -89,7 +100,7 @@ class RBF(torch.nn.Module):
         Computes K(X, X_2)
         @param X: Input 1 (N,D_in)
         @param X2:  Input 2 (M,D_in)
-        @return: Tensor (D,N,M) if dimwise else (N,M)
+        @return: Tensor (D_out,N,M) if dimwise else (N,M)
         """
         if self.dimwise:
             sq_dist = torch.exp(- 0.5 * self.square_dist_dimwise(X, X2))  # (D_out,N,M)
@@ -100,7 +111,8 @@ class RBF(torch.nn.Module):
 
     def sample_freq(self, S, seed=None, device='cpu'):
         """
-        Computes random samples from the spectral density for Squared exponential kernel
+        Computes random samples from the spectral density for Squared exponential kernel: omega ~ N(0, A),
+        where A is diagonal matrix collecting lengthscale parameters of the kernel. 
         @param S: Number of features
         @param seed: random seed
         @return: Tensor a random sample from standard Normal (D_in, S, D_out) if dimwise else (D_in, S)
@@ -111,79 +123,183 @@ class RBF(torch.nn.Module):
             1)  # (D_in,1,D_out) or (D_in,1)
         return omega / lengthscales  # (D_in, S, D_out) or (D_in, S)
 
+    def build_cache(self, S, device):
+        """
+        Generate and fix parameters of Fourier features
+        @param S: Number of features to consider for Fourier feature maps
+        Set omega and b of phi(x)=cos(omega*x + b) of rff
+        Set w of w*phi(x) of prior update
+        """
+        # generate parameters required for the Fourier feature maps
+        self.rff_weights = sample_normal((S, self.D_out)).to(device)  # (S,D_out)
+        self.rff_omega = self.sample_freq(S, device=device)  # (D_in,S) or (D_in,S,D_out)
+        phase_shape = (1, S, self.D_out) if self.dimwise else (1, S)
+        self.rff_phase = sample_uniform(phase_shape).to(device) * 2 * np.pi  # (S,D_out)
+
+
+    def rff_forward(self, x, S):
+        """
+        Calculates samples from the GP prior with random Fourier Features
+        @param x: input tensor (N,D)
+        @return: function values (N,D_out)
+        """
+        # compute feature map
+        xo = torch.einsum('nd,dfk->nfk' if self.dimwise else 'nd,df->nf', x, self.rff_omega)  # (N,S) or (N,S,D_in)
+        phi_ = torch.cos(xo + self.rff_phase)  # (N,S) or (N,S,D_in)
+        phi = phi_ * torch.sqrt(self.variance / S)  # (N,S) or (N,S,D_in)
+
+        # compute function values
+        f = torch.einsum('nfk,fk->nk' if self.dimwise else 'nf,fd->nd', phi, self.rff_weights)  # (N,D_out)
+        return f  # (N,D_out)
+
+    def compute_nu(self,Ku, u_prior,inducing_val):
+        '''
+        @param Lu: lower triangular
+        @param u_prior: phi(x)
+        @param induving_val: u
+        compute the term nu = k(Z,Z)^{-1}(u-f(Z)) in whitened form of inducing variables
+        equation (13) from http://proceedings.mlr.press/v119/wilson20a/wilson20a.pdf
+        '''
+        Lu = torch.linalg.cholesky(Ku + torch.eye(Ku.shape[0]).to(Ku.device) * jitter)  # (M,M) or (D,M,M)
+        if not self.dimwise:
+            nu = torch.triangular_solve(u_prior, Lu, upper=False)[0]  # (M,D)
+            nu = torch.triangular_solve((inducing_val - nu),
+                                        Lu.T, upper=True)[0]  # (M,D)
+        else:
+            nu = torch.triangular_solve(u_prior.T.unsqueeze(2), Lu, upper=False)[0]  # (D,M,1)
+            nu = torch.triangular_solve((inducing_val.T.unsqueeze(2) - nu),
+                                        Lu.permute(0, 2, 1), upper=True)[0]  # (D,M,1)
+        self.nu = nu  # (D,M)
+
+    def f_update(self, x, x2):
+        if not self.dimwise:
+            Kuf = self.K(x2, x)  # (M,N)
+            f_update = torch.einsum('md, mn -> nd', self.nu, Kuf)  # (N,D)
+        else:
+            Kuf = self.K(x2, x)  # (D,M,N)
+            f_update = torch.einsum('dm, dmn -> nd', self.nu.squeeze(2), Kuf)  # (N,D)
+        return f_update
+
 class Periodic(torch.nn.Module):
     pass 
 #combination pass first through period then through rbf (rbf +periodic)
 
 class DivergenceFreeKernel(RBF):
-    def __init__(self, D_in, D_out, dimwise=False):
-        super(DivergenceFreeKernel, self).__init__(D_in=D_in, D_out=D_out,dimwise=dimwise)
+    def __init__(self, D_in, D_out):
+        super(DivergenceFreeKernel, self).__init__(D_in=D_in, D_out=D_out,dimwise=False)
 
     def difference_matrix(self, X, X2=None):
         '''
         Computes (X-X2)
         '''
-        X = X / self.lengthscales  # (N,D_in)
+        X = (X / self.lengthscales).unsqueeze(-1)  # (N,D_in,1)
         if X2 is None:
             X2=X
         else:
-            X2 = X2 / self.lengthscales# (M,D_in)
-        return X[:,None,:] - X2[None,:,:] #broadcasting rules (M,N, D_in)
-
-    def difference_matrix_dimwise(self, X, X2=None):
-        '''
-        Computes (X-X2)
-        '''
-        X = X.unsqueeze(0) / self.lengthscales.unsqueeze(1)  # (D_out,N,D_in)
-        if X2 is None:
-            X2=X
-        else:
-            X2 = X2.unsqueeze(0) / self.lengthscales.unsqueeze(1)  # (D_out,M,D_in)
-        return X[:,:,None,:] - X2[:,None,:,:] #broadcasting rules (D_out, M, N, D_in)
+            X2 = (X2 / self.lengthscales).unsqueeze(-1)# (M,D_in,1)
+        X2 = torch.permute(X2, (2,1,0)) # (1, D_in, M)
+        return torch.subtract(X,X2)  #N,D_in,M
     
-    def identity(self, X, X2=None):
-        if X2 is None:
-            return torch.eye(X.shape[0]).to(X.device)
-        else:
-            return torch.eye(X2.shape[0]).to(X2.device)
+    def eye_like(self, X, d:int, X2=None) -> torch.Tensor:
+        """
+        Return a tensor with same batch size as x, that has a nxn eye matrix in each sample in batch.
+
+        Args:
+            @param X: Input 1 (N,D_in)
+            @param X2:  Input 2 (M,D_in)
+            @param n: Input dimensions
+        Returns:
+            tensor of shape (N, M, n, n) that has the same dtype and device as x.
+        """
+        N = X.shape[0]
+        M = X2.shape[0] if X2 != None else N
+        return torch.eye(d, d,device=X.device).unsqueeze(0).repeat(N,M, 1, 1)
+
+    def reshape(self, K, X, X2=None):
+        N = X.shape[0]
+        M = N if X2==None else X2.shape[0]
+        return torch.reshape(K,(N*self.D_in,M*self.D_in))
+
 
     def K(self, X, X2=None):
         """
         Computes K(X, X_2)
         @param X: Input 1 (N,D_in)
         @param X2:  Input 2 (M,D_in)
-        @return: Tensor (D,N,M) if dimwise else (N,M)
+        @return: Tensor (N,M,D_in,D_in)
         """
-        if self.dimwise:
-            sq_dist = self.square_dist_dimwise(X, X2) # (D_out, M,N)
-            K2 = torch.exp(-0.5 * sq_dist) # (D_out, M,N)
-            K2 = K2.unsqueeze(0) # (1, D_out,M,N)
-            diff = self.difference_matrix_dimwise(X, X2) #(D_out, M,N,D_in)
-            diff1 = torch.permute(diff, (0,1,3,2)) # (D_out,M, D_in, N)
-            K1_term = torch.einsum('dmni, dmin -> idmn', diff, diff1) # (D_in, D_out,M,N) #TODO not sure if this is correct
-            K3 = (self.D_in - 1.0) - sq_dist # (D_out,M,N)
-            K3 = K3 @ self.identity(X,X2) # D_out,M,N
-            K3 = K3.unsqueeze(0) # 1,D_out,M, N
-            K = (K1_term + K3) * K2 # D_in,D_out, M, N
-            K = torch.permute(K,(1,2,3,0)) # D_out,M,N,D_in
-            l2 = torch.permute((1.0/torch.pow(self.lengthscales,2)), (1,0))
-        else:
-            #works for both, when X2 val and X2=None 
-            sq_dist = self.square_dist(X, X2)  # (N,M)
-            K2 = torch.exp(-0.5 * sq_dist) # (M,N)
-            K2 = K2.unsqueeze(0) # (1,M,N)
-            diff = self.difference_matrix(X, X2) #(M,N,D_in)
-            diff1 = torch.permute(diff, (0,2,1)) # (M, D_in, N)
-            K1_term = torch.einsum('mnd, mdn -> dmn', diff, diff1) # (D_in,M,N)
-            K3 = (self.D_in - 1.0) - sq_dist # (M,N)
-            K3 = K3 @ self.identity(X,X2) # M,N
-            K3 = K3.unsqueeze(0) # 1, M, N
-            K = (K1_term + K3) * K2 # D_in, M, N
-            K = torch.permute(K,(1,2,0)) # M,N,D_in
-            l2 = torch.permute((1.0/torch.pow(self.lengthscales,2).unsqueeze(0)), (1,0))
+        sq_dist = self.square_dist(X, X2)  # (N,M)
+        rbf_term = self.variance * torch.exp(-0.5 * sq_dist)[:,:,None,None]  # (N,M, 1,1)
+        diff = self.difference_matrix(X,X2) #(N,D_in,M)
+        
+        diff1 = torch.permute(diff.unsqueeze(-1), (0,2,1,3)) # (N, M, D_in, 1)
+        diff2 = torch.permute(diff.unsqueeze(-1), (0,2,3,1)) # (N, M, 1, D_in)
+        term1 = torch.multiply(diff1, diff2) #N,M, D_in, D_in
 
-        K = K @ l2
-        K = K @ self.variance.unsqueeze(-1)
-        return K.squeeze()
 
+        term2 = torch.multiply(((self.D_in - 1.0) - sq_dist[:,:,None,None]), self.eye_like(X,self.D_in,X2)) #N,M,D_in, D_in
+        hes_term  = term1 + term2 
+
+        K = rbf_term * hes_term / torch.square(self.lengthscales)
+        K = self.reshape(torch.permute(K, (0,2,1,3)), X, X2) 
+       
+        return K #(N*D_in, M*D_in) 
+
+    def rff_forward(self, x, S):
+        """
+        Calculates samples from the GP prior with operator random Fourier Features
+        @param x: input tensor (N,D)
+        @return: function values (N,D_out)
+        according to http://proceedings.mlr.press/v63/Brault39.pdf derivation of ORRF for Div-free
+        """
+        #compute B^*(omega)
+        #norm = torch.linalg.vector_norm(self.rff_omega, ord=2, dim=0, keepdim=True)
+        #print('norm',norm.shape)
+        norm = torch.norm(self.rff_omega)
+        w_w = torch.matmul(self.rff_omega,self.rff_omega.T)/norm
+        #print('mamt', w_w)
+        # n = torch.norm(self.rff_omega)
+        #norm = self.rff_omega.pow(2).sum(dim=0)
+        #I_matrix = torch.eye(self.D_in, device=x.device).unsqueeze(0).repeat(S,1,1)
+        #print('I_matrix', I_matrix.shape)
+        #b_omega = torch.sqrt(norm*torch.eye(self.D_in, device=x.device) - w_w) #(D_in, D_in)
+        b_omega = norm*torch.eye(self.D_in, device=x.device) - w_w #(D_in, D_in)
+       # b_omega = norm*I_matrix - matm
+        #print('b_omega', b_omega)
+        # compute feature map
+        xo = torch.einsum('nd,df->nf', x, self.rff_omega)  # (N,S) 
+        #print('xo', xo[0,0:10])
+        phi_ = torch.cos(xo + self.rff_phase)  # (N,S)
+        phi_ = torch.kron(phi_,b_omega) # (N*D_in , S*D_in)
+        phi = phi_ * torch.sqrt(self.variance / S)  # (N*D_in , S*D_in) 
+        phi = torch.reshape(phi, (x.shape[0],S,self.D_in,self.D_in)) #(N,S,D_in,D_in)
+       # print('phi', phi[0,0,:,:])
+
+        # compute function values
+        f = torch.einsum('nfij,fd->ndij', phi, self.rff_weights)  # ( N, D_out, D_in, D_in )
+        f = torch.permute(f, (0,2,1,3)) # (N,D_in, D_out,D_in)
+        f = torch.reshape(f,(x.shape[0]*self.D_in, self.D_out*self.D_in))
+        return f  # ND_in, D_outD_in 
+
+    def compute_nu(self,Ku, u_prior,inducing_val):
+        '''
+        @param Lu: lower triangular
+        @param u_prior: phi(x)
+        @param induving_val: u
+        compute the term nu = k(Z,Z)^{-1}(u-f(Z)) in whitened form of inducing variables
+        equation (13) from http://proceedings.mlr.press/v119/wilson20a/wilson20a.pdf
+        '''
+        Lu = torch.linalg.cholesky(Ku + torch.eye(Ku.shape[0]).to(Ku.device) * jitter)  #MD_in,MD_in
+        nu = torch.triangular_solve(u_prior, Lu, upper=False)[0]  # (MD_in, D_outD_in)
+        nu = torch.reshape(nu,(inducing_val.shape[0],self.D_in,self.D_out,self.D_in))
+        delta = torch.reshape(inducing_val[:,None,:,None] - nu,(inducing_val.shape[0]*self.D_in,self.D_out*self.D_in)) #MD_in,D_outD_in
+        nu = torch.triangular_solve(delta,Lu.T, upper=True)[0]  # (D_in, D_in, M,D_out)
+        self.nu = nu  # (MD_in, D_outD_in)
+
+
+    def f_update(self, x, x2):
+        Kuf = self.K(x2, x)  #(MD_in, ND_in) 
+        #print('Kuf', Kuf[0,0:10])
+        f_update = torch.einsum('md, mn -> nd', self.nu, Kuf)  # NDin,D_outDin
+        return f_update 
 
