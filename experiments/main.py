@@ -24,6 +24,10 @@ parser.add_argument('--num_features', type=int, default=256,
                     help="Number of Fourier basis functions (for pathwise sampling from GP)")
 parser.add_argument('--num_inducing', type=int, default=100,
                     help="Number of inducing points for the sparse GP")
+parser.add_argument('--variance', type=float, default=0.25,
+                    help="Initial value for rbf variance")
+parser.add_argument('--lengthscale', type=float, default=0.65,
+                    help="Initial value for rbf lengthscale")
 parser.add_argument('--dimwise', type=eval, default=True,
                     help="Specify separate lengthscales for every output dimension")
 parser.add_argument('--q_diag', type=eval, default=False,
@@ -131,11 +135,11 @@ if __name__ == '__main__':
     ########### model ###########
     odegpvae = build_model(args)
     odegpvae.to(args.device)
-    odegpvae = initialize_and_fix_kernel_parameters(odegpvae, lengthscale_value=0.65, variance_value=0.25, fix=False) #1.25, 0.5
+    odegpvae = initialize_and_fix_kernel_parameters(odegpvae, lengthscale_value=args.lengthscale, variance_value=args.variance, fix=False) #1.25, 0.5, 0.65 0.25
 
     logger.info('********** Model Built {} ODE **********'.format(args.order))
-    logger.info('Model parameters: num features {} | num inducing {} | num epochs {} | lr {} | trace computation {}| kl_0 {} | order {} | D_in {} | D_out {} | beta {} | kernel {} | latent_dim {}'.format(
-                    args.num_features, args.num_inducing, args.Nepoch,args.lr, args.trace, args.kl_0, args.order, args.D_in, args.D_out, args.beta, args.kernel, args.q))
+    logger.info('Model parameters: num features {} | num inducing {} | num epochs {} | lr {} | trace computation {}| kl_0 {} | order {} | D_in {} | D_out {} | beta {} | kernel {} | latent_dim {} | variance {} |lengthscale {}'.format(
+                    args.num_features, args.num_inducing, args.Nepoch,args.lr, args.trace, args.kl_0, args.order, args.D_in, args.D_out, args.beta, args.kernel, args.q, args.variance, args.lengthscale))
 
     if args.continue_training:
         fname = os.path.join(os.path.abspath(os.path.dirname(__file__)), args.model_path)

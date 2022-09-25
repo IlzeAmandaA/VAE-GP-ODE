@@ -160,7 +160,7 @@ class RBF(torch.nn.Module):
         compute the term nu = k(Z,Z)^{-1}(u-f(Z)) in whitened form of inducing variables
         equation (13) from http://proceedings.mlr.press/v119/wilson20a/wilson20a.pdf
         '''
-        Lu = torch.linalg.cholesky(Ku + torch.eye(Ku.shape[0]).to(Ku.device) * jitter)  # (M,M) or (D,M,M)
+        Lu = torch.linalg.cholesky(Ku + torch.eye(Ku.shape[-1]).to(Ku.device) * jitter)  # (M,M) or (D,M,M)
         if not self.dimwise:
             nu = torch.triangular_solve(u_prior, Lu, upper=False)[0]  # (M,D)
             nu = torch.triangular_solve((inducing_val - nu),
