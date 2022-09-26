@@ -50,8 +50,8 @@ class RBF(torch.nn.Module):
         self._initialize()
 
     def _initialize(self):
-        init.constant_(self.unconstrained_lengthscales, invsoftplus(torch.tensor(1.3)).item())
-        init.constant_(self.unconstrained_variance, invsoftplus(torch.tensor(0.5)).item())
+        init.constant_(self.unconstrained_lengthscales, invsoftplus(torch.tensor(0.2)).item()) #1.3
+        init.constant_(self.unconstrained_variance, invsoftplus(torch.tensor(0.1)).item()) #0.5
 
     @property
     def lengthscales(self):
@@ -180,6 +180,20 @@ class RBF(torch.nn.Module):
             f_update = torch.einsum('dm, dmn -> nd', self.nu.squeeze(2), Kuf)  # (N,D)
         return f_update
 
+    def forward(self, X, X2=None):
+        """
+        Computes K(X, X_2)
+        @param X: Input 1 (N,D_in)
+        @param X2:  Input 2 (M,D_in)
+        @return: Tensor (D_out,N,M) if dimwise else (N,M)
+        """
+        if self.dimwise:
+            sq_dist = torch.exp(- 0.5 * self.square_dist_dimwise(X, X2))  # (D_out,N,M)
+            return self.variance[:, None, None] * sq_dist  # (D_out,N,M)
+        else:
+            sq_dist = torch.exp(-0.5 * self.square_dist(X, X2))  # (N,M)
+            return self.variance * sq_dist  # (N,M)
+
 class Periodic(torch.nn.Module):
     pass 
 #combination pass first through period then through rbf (rbf +periodic)
@@ -221,7 +235,7 @@ class DivergenceFreeKernel(RBF):
         return torch.reshape(K,(N*self.D_in,M*self.D_in))
 
 
-    def K(self, X, X2=None):
+    def K(self, X, X2=None, full_output_cov=True):
         """
         Computes K(X, X_2)
         @param X: Input 1 (N,D_in)
@@ -237,11 +251,19 @@ class DivergenceFreeKernel(RBF):
         term1 = torch.multiply(diff1, diff2) #N,M, D_in, D_in
 
 
-        term2 = torch.multiply(((self.D_in - 1.0) - sq_dist[:,:,None,None]), self.eye_like(X,self.D_in,X2)) #N,M,D_in, D_in
+        term2 = torch.multiply(((self.D_in - 1.0) - sq_dist)[:,:,None,None], self.eye_like(X,self.D_in,X2)) #N,M,D_in, D_in
         hes_term  = term1 + term2 
 
         K = rbf_term * hes_term / torch.square(self.lengthscales)
-        K = self.reshape(torch.permute(K, (0,2,1,3)), X, X2) 
+        K = self.reshape(torch.permute(K, (0,2,1,3)), X, X2)
+
+        # if full_output_cov:
+        #     K = torch.permute(K, (0,2,1,3))
+        #     return K
+        # else:
+        #     K = torch.diagonal(torch.tensor(K), dim1=-2, dim2=-1)
+        #     return torch.permute(K, [2, 0, 1])
+ 
        
         return K #(N*D_in, M*D_in) 
 
@@ -289,7 +311,8 @@ class DivergenceFreeKernel(RBF):
         compute the term nu = k(Z,Z)^{-1}(u-f(Z)) in whitened form of inducing variables
         equation (13) from http://proceedings.mlr.press/v119/wilson20a/wilson20a.pdf
         '''
-        Lu = torch.linalg.cholesky(Ku + torch.eye(Ku.shape[0]).to(Ku.device) * jitter)  #MD_in,MD_in
+        #Lu = torch.linalg.cholesky(Ku + torch.eye(Ku.shape[0]).to(Ku.device) * jitter)  #MD_in,MD_in
+        Lu = torch.linalg.cholesky(Ku + torch.eye(Ku.shape[0]).to(Ku.device) * jitter)
         nu = torch.triangular_solve(u_prior, Lu, upper=False)[0]  # (MD_in, D_outD_in)
         nu = torch.reshape(nu,(inducing_val.shape[0],self.D_in,self.D_out,self.D_in))
         delta = torch.reshape(inducing_val[:,None,:,None] - nu,(inducing_val.shape[0]*self.D_in,self.D_out*self.D_in)) #MD_in,D_outD_in
@@ -302,4 +325,36 @@ class DivergenceFreeKernel(RBF):
         #print('Kuf', Kuf[0,0:10])
         f_update = torch.einsum('md, mn -> nd', self.nu, Kuf)  # NDin,D_outDin
         return f_update 
+
+    def forward(self, X, X2=None, full_output_cov = True):
+        """
+        Computes K(X, X_2)
+        @param X: Input 1 (N,D_in)
+        @param X2:  Input 2 (M,D_in)
+        @return: Tensor (N,M,D_in,D_in)
+        """
+        sq_dist = self.square_dist(X, X2)  # (N,M)
+        rbf_term = self.variance * torch.exp(-0.5 * sq_dist)[:,:,None,None]  # (N,M, 1,1)
+        diff = self.difference_matrix(X,X2) #(N,D_in,M)
+        
+        diff1 = torch.permute(diff.unsqueeze(-1), (0,2,1,3)) # (N, M, D_in, 1)
+        diff2 = torch.permute(diff.unsqueeze(-1), (0,2,3,1)) # (N, M, 1, D_in)
+        term1 = torch.multiply(diff1, diff2) #N,M, D_in, D_in
+
+
+        term2 = torch.multiply(((self.D_in - 1.0) - sq_dist[:,:,None,None]), self.eye_like(X,self.D_in,X2)) #N,M,D_in, D_in
+        hes_term  = term1 + term2 
+
+        K = rbf_term * hes_term / torch.square(self.lengthscales)
+
+        if full_output_cov:
+            K = torch.permute(K, (0,2,1,3))
+            return K
+        else:
+            K = torch.diagonal(torch.tensor(K), dim1=-2, dim2=-1)
+            return torch.permute(K, [2, 0, 1])
+
+        
+       
+        #return K #(N*D_in, M*D_in) 
 

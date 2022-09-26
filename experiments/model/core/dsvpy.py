@@ -7,6 +7,7 @@ import torch
 import sys
 
 
+jitter = 1e-5
 
 def sample_normal(shape, seed=None):
     # sample from standard Normal with a given shape
@@ -181,8 +182,7 @@ class DSVGP_Layer(torch.nn.Module):
         kl = 0.5 * twoKL.sum()
         return kl
 
-    '''
-    Functions that currently I am not using : build_conditional()
+
 
     def build_conditional(self, x, full_cov=False):
         """
@@ -216,4 +216,3 @@ class DSVGP_Layer(torch.nn.Module):
         var = Kff + delta_cov
         mean = torch.einsum('dmn, md->nd' if self.dimwise else 'mn, md->nd', A, self.Um())
         return mean, var.T  # (N,D) , (N,D) or (N,N,D)
-    ''' 

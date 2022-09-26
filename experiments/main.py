@@ -136,6 +136,8 @@ if __name__ == '__main__':
     odegpvae = build_model(args)
     odegpvae.to(args.device)
     odegpvae = initialize_and_fix_kernel_parameters(odegpvae, lengthscale_value=args.lengthscale, variance_value=args.variance, fix=False) #1.25, 0.5, 0.65 0.25
+    # print(odegpvae.flow.odefunc.diffeq.kern.lengthscales)
+    # print(odegpvae.flow.odefunc.diffeq.kern.variance)
 
     logger.info('********** Model Built {} ODE **********'.format(args.order))
     logger.info('Model parameters: num features {} | num inducing {} | num epochs {} | lr {} | trace computation {}| kl_0 {} | order {} | D_in {} | D_out {} | beta {} | kernel {} | latent_dim {} | variance {} |lengthscale {}'.format(
