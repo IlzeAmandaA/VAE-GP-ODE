@@ -28,10 +28,10 @@ def load_mnist_data(args, plot=True):
 		X = X[Y==args.value,:,:]
 
 	N = args.Ndata
-	# Nt = args.Ntest + N
+	Nt = args.Ntest + N
 	T = args.T #16
 	Xtr   = torch.tensor(X[:N],dtype=torch.float32).view([N,T,1,28,28])
-	Xtest = torch.tensor(X[N:],dtype=torch.float32).view([-1,T,1,28,28])
+	Xtest = torch.tensor(X[N:Nt],dtype=torch.float32).view([-1,T,1,28,28])
 
 	if args.rotrand:
 		Xtr = rot_start(Xtr,T,N)
