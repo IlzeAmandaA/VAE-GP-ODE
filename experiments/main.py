@@ -24,9 +24,9 @@ parser.add_argument('--num_features', type=int, default=256,
                     help="Number of Fourier basis functions (for pathwise sampling from GP)")
 parser.add_argument('--num_inducing', type=int, default=100,
                     help="Number of inducing points for the sparse GP")
-parser.add_argument('--variance', type=float, default=0.25,
+parser.add_argument('--variance', type=float, default=0.5,
                     help="Initial value for rbf variance")
-parser.add_argument('--lengthscale', type=float, default=0.65,
+parser.add_argument('--lengthscale', type=float, default=1.3,
                     help="Initial value for rbf lengthscale")
 parser.add_argument('--dimwise', type=eval, default=True,
                     help="Specify separate lengthscales for every output dimension")
