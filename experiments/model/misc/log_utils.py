@@ -41,6 +41,7 @@ class CachedAverageMeter(object):
         self.avg = 0
         self.sum = 0
         self.count = 0
+        self.std = 0
         self.vals = []
         self.iters = []
 

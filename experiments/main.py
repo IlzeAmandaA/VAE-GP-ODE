@@ -58,11 +58,13 @@ parser.add_argument('--value', type=int, default=3,
                     help="training choice")
 parser.add_argument('--data_seqlen', type=int, default=100,
                     help="Training sequence length")
-parser.add_argument('--batch', type=int, default=25,
+parser.add_argument('--batch', type=int, default=20,
                     help="batch size")
 parser.add_argument('--T', type=int, default=16,
                     help="Number of time points")
-parser.add_argument('--Ndata', type=int, default=500,
+parser.add_argument('--Ndata', type=int, default=360,
+                    help="Number training data points")
+parser.add_argument('--Ntest', type=int, default=40,
                     help="Number training data points")
 parser.add_argument('--rotrand', type=eval, default=False,
                     help="if True multiple initial rotatio angles")
