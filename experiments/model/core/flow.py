@@ -19,9 +19,8 @@ class ODEfunc(nn.Module):
         self.order = order
         self.register_buffer("_num_evals", torch.tensor(0.))
 
-    def before_odeint(self, trace, rebuild_cache):
+    def before_odeint(self, rebuild_cache):
         self._num_evals.fill_(0)
-        self.trace = trace
         if rebuild_cache:
             self.diffeq.build_cache()
 
@@ -32,40 +31,40 @@ class ODEfunc(nn.Module):
         '''
         trace computation based on: https://github.com/rtqichen/ffjord/blob/master/lib/layers/odefunc.py#L13
         '''
-        if self.trace:
-            vs, logp = vs_logp
-            q = vs.shape[1]
-            dvs = self.diffeq(vs) # 25,2q
-            ddvi_dvi = torch.stack(
-                        [torch.autograd.grad(dvs[:,i],vs,torch.ones_like(dvs[:,i]),
-                        create_graph=True)[0].contiguous()[:,i]
-                        for i in range(q)],1) # N,q --> df(x)_i/dx_i, i=1..q
-            tr_ddvi_dvi = torch.sum(ddvi_dvi,1) # N
-            return (dvs, -tr_ddvi_dvi)
-        else:
-            vs = vs_logp
-            dvs = self.diffeq(vs) # 25, 2q
-            return dvs
+        # if self.trace:
+        #     vs, logp = vs_logp
+        #     q = vs.shape[1]
+        #     dvs = self.diffeq(vs) # 25,2q
+        #     ddvi_dvi = torch.stack(
+        #                 [torch.autograd.grad(dvs[:,i],vs,torch.ones_like(dvs[:,i]),
+        #                 create_graph=True)[0].contiguous()[:,i]
+        #                 for i in range(q)],1) # N,q --> df(x)_i/dx_i, i=1..q
+        #     tr_ddvi_dvi = torch.sum(ddvi_dvi,1) # N
+        #     return (dvs, -tr_ddvi_dvi)
+        # else:
+        vs = vs_logp
+        dvs = self.diffeq(vs) # 25, 2q
+        return dvs
 
     def second_order(self, vs_logp):
-        if self.trace:
-            vs, logp = vs_logp
-            q = vs.shape[1]//2
-            dv = self.diffeq(vs) # 25,8
-            ds = vs[:,:q]  # N,q
-            dvs = torch.cat([dv,ds],1) # N,2q
-            ddvi_dvi = torch.stack(
-                        [torch.autograd.grad(dv[:,i],vs,torch.ones_like(dv[:,i]),
-                        create_graph=True)[0].contiguous()[:,i]
-                        for i in range(q)],1) # N,q --> df(x)_i/dx_i, i=1..q
-            tr_ddvi_dvi = torch.sum(ddvi_dvi,1) # N
-            return (dvs, -tr_ddvi_dvi)
-        else:
-            vs = vs_logp
-            q = vs.shape[1]//2
-            dv = self.diffeq(vs) # N,q
-            ds = vs[:,:q]  # N,q
-            return torch.cat([dv,ds],1) # N,2q  
+        # if self.trace:
+        #     vs, logp = vs_logp
+        #     q = vs.shape[1]//2
+        #     dv = self.diffeq(vs) # 25,8
+        #     ds = vs[:,:q]  # N,q
+        #     dvs = torch.cat([dv,ds],1) # N,2q
+        #     ddvi_dvi = torch.stack(
+        #                 [torch.autograd.grad(dv[:,i],vs,torch.ones_like(dv[:,i]),
+        #                 create_graph=True)[0].contiguous()[:,i]
+        #                 for i in range(q)],1) # N,q --> df(x)_i/dx_i, i=1..q
+        #     tr_ddvi_dvi = torch.sum(ddvi_dvi,1) # N
+        #     return (dvs, -tr_ddvi_dvi)
+        # else:
+        vs = vs_logp
+        q = vs.shape[1]//2
+        dv = self.diffeq(vs) # N,q
+        ds = vs[:,:q]  # N,q
+        return torch.cat([dv,ds],1) # N,2q  
 
     def forward(self, t, vs_logp): #this forward is my oderhs 
         self._num_evals += 1
@@ -95,7 +94,7 @@ class Flow(nn.Module):
         self.rtol = rtol
         self.use_adjoint = use_adjoint
 
-    def forward(self, z0, logp0, ts, trace=True):
+    def forward(self, z0, ts):
         """
         Numerical solution of an IVP
         @param z0: Initial latent state (N,2q)
@@ -104,27 +103,27 @@ class Flow(nn.Module):
         @return: zt, logp: (N,T,2q) tensor, (N,T) tensor
         """
         odeint = odeint_adjoint if self.use_adjoint else odeint_nonadjoint
-        self.odefunc.before_odeint(trace = trace, rebuild_cache=True)
-        if trace:
-            zt, logp = odeint(
-                self.odefunc,
-                (z0, logp0),
-                ts,
-                atol=self.atol,
-                rtol=self.rtol,
-                method=self.solver
-            )
-            return zt.permute(1, 0, 2), logp.permute([1,0])  # (N,T,2q) (N,T)
-        else:
-            zt = odeint(
-                self.odefunc,
-                z0,
-                ts,
-                atol=self.atol,
-                rtol=self.rtol,
-                method=self.solver
-            )
-            return zt.permute([1,0,2])
+        self.odefunc.before_odeint(rebuild_cache=True)
+        # if trace:
+        #     zt, logp = odeint(
+        #         self.odefunc,
+        #         (z0),
+        #         ts,
+        #         atol=self.atol,
+        #         rtol=self.rtol,
+        #         method=self.solver
+        #     )
+        #     return zt.permute(1, 0, 2), logp.permute([1,0])  # (N,T,2q) (N,T)
+        # else:
+        zt = odeint(
+            self.odefunc,
+            z0,
+            ts,
+            atol=self.atol,
+            rtol=self.rtol,
+            method=self.solver
+        )
+        return zt.permute([1,0,2])
 
 
     def num_evals(self):

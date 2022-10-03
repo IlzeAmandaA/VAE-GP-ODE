@@ -51,8 +51,14 @@ def plot_rot_mnist(X, Xrec, show=False, fname='rot_mnist.png'):
 
 def plot_latent_dynamics(model, data, args, fname):
     [N,T,nc,d,d] = data.shape
-    z0, logp0 = model.build_encoding(data)
-    zt = model.build_flow(z0, logp0, T, trace=False)
+    s0_mu, s0_logv = model.vae.encoder_s(data[:,0]) #N,q
+    z0 = model.vae.encoder_s.sample(mu = s0_mu, logvar = s0_logv)
+    v0_mu, v0_logv = None, None
+    if model.order == 2:
+        v0_mu, v0_logv = model.vae.encoder_v(torch.squeeze(data[:,0:model.v_steps]))
+        v0 = model.vae.encoder_v.sample(mu= v0_mu, logvar = v0_logv)
+        z0 = torch.concat([v0,z0],dim=1) #N, 2q
+    zt = model.build_flow(z0, T)
     if args.order == 1:
         plot_latent_state(zt, show=False, fname=fname)
     elif args.order ==2:
@@ -111,8 +117,8 @@ def plot_latent_velocity(vt_mu, show=False, fname='latent_dyanamics'):
         plt.savefig(fname+'_velocity.png')
         plt.close()
 
-def plot_trace(elbo_meter, nll_meter,  z_kl_meter, inducing_kl_meter, logpL_meter, logztL_meter, args, make_plot=False):
-    fig, axs = plt.subplots(3, 2, figsize=(20, 16))
+def plot_trace(elbo_meter, nll_meter,  z_kl_meter, inducing_kl_meter, args, make_plot=False): #logpL_meter, logztL_meter, 
+    fig, axs = plt.subplots(2, 2, figsize=(20, 16))
 
     axs[0][0].plot(elbo_meter.iters, elbo_meter.vals)
     axs[0][0].set_title("Loss (-elbo) function")
@@ -126,12 +132,12 @@ def plot_trace(elbo_meter, nll_meter,  z_kl_meter, inducing_kl_meter, logpL_mete
     axs[1][1].plot(inducing_kl_meter.iters,inducing_kl_meter.vals)
     axs[1][1].set_title("Inducing KL")
     axs[1][1].grid()
-    axs[2][0].plot(logpL_meter.iters, logpL_meter.vals)
-    axs[2][0].set_title("Loss log trace")
-    axs[2][0].grid()
-    axs[2][1].plot(logztL_meter.iters, logztL_meter.vals)
-    axs[2][1].set_title("Loss log p(z)")
-    axs[2][1].grid()
+    # axs[2][0].plot(logpL_meter.iters, logpL_meter.vals)
+    # axs[2][0].set_title("Loss log trace")
+    # axs[2][0].grid()
+    # axs[2][1].plot(logztL_meter.iters, logztL_meter.vals)
+    # axs[2][1].set_title("Loss log p(z)")
+    # axs[2][1].grid()
 
     fig.subplots_adjust()
     if make_plot:

@@ -7,6 +7,11 @@ import numpy as np
 
 PI = torch.from_numpy(np.asarray(np.pi))
 
+def log_normal_diag(mu, log_var, z):
+    D = z.shape[-1]
+    log_p = -0.5 * D * torch.log(2.*PI) - 0.5 * log_var - 0.5 * torch.exp(-log_var) * (z-mu)**2
+    return log_p
+
 class Bernoulli(nn.Module):
     """
     Bernoulli likelihood
@@ -31,7 +36,7 @@ class Bernoulli(nn.Module):
 
 class Multivariate_Standard(nn.Module):
     """
-    Multivariate Standard Gaussian Distribution
+    Multivariate Normal Gaussian Distribution
     """
 
     def __init__(self, L, device):
@@ -42,14 +47,14 @@ class Multivariate_Standard(nn.Module):
 
     @property
     def _probability(self):
-        return 'Standard Gaussian'
+        return 'Multivariate Gaussian'
     
     def get_params(self):
         return self.means, self.covariance
 
     def log_prob(self, x_m):
         '''
-        log standrad normal 
+        log standard normal 
         '''
         d = x_m.shape[-1]
         return torch.log(1 / torch.sqrt((2 * torch.pi)**d* torch.det(self.covariance)) * \

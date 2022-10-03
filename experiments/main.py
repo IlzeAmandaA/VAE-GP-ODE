@@ -34,10 +34,8 @@ parser.add_argument('--q_diag', type=eval, default=False,
                     help="Diagonal posterior approximation for inducing variables")
 parser.add_argument('--num_latents', type=int, default=5,
                     help="Number of latent dimensions for training")
-parser.add_argument('--trace', type=eval, default=True,
-                    help="Compute trace")
-parser.add_argument('--kl_0', type=eval, default=False,
-                    help="Specifies to set initial KL to 0")
+# parser.add_argument('--trace', type=eval, default=False,
+#                     help="Compute trace")
 parser.add_argument('--order', type=int, default=2,
                     help="order of ODE")
 parser.add_argument('--continue_training', type=eval, default=False,
@@ -142,8 +140,8 @@ if __name__ == '__main__':
     # print(odegpvae.flow.odefunc.diffeq.kern.variance)
 
     logger.info('********** Model Built {} ODE **********'.format(args.order))
-    logger.info('Model parameters: num features {} | num inducing {} | num epochs {} | lr {} | trace computation {}| kl_0 {} | order {} | D_in {} | D_out {} | beta {} | kernel {} | latent_dim {} | variance {} |lengthscale {}'.format(
-                    args.num_features, args.num_inducing, args.Nepoch,args.lr, args.trace, args.kl_0, args.order, args.D_in, args.D_out, args.beta, args.kernel, args.q, args.variance, args.lengthscale))
+    logger.info('Model parameters: num features {} | num inducing {} | num epochs {} | lr {} | order {} | D_in {} | D_out {} | beta {} | kernel {} | latent_dim {} | variance {} |lengthscale {}'.format(
+                    args.num_features, args.num_inducing, args.Nepoch,args.lr, args.order, args.D_in, args.D_out, args.beta, args.kernel, args.q, args.variance, args.lengthscale))
 
     if args.continue_training:
         fname = os.path.join(os.path.abspath(os.path.dirname(__file__)), args.model_path)
@@ -156,8 +154,8 @@ if __name__ == '__main__':
     nll_meter = log_utils.CachedRunningAverageMeter(10)
     reg_kl_meter = log_utils.CachedRunningAverageMeter(10)
     inducing_kl_meter = log_utils.CachedRunningAverageMeter(10)
-    logpL_meter = log_utils.CachedRunningAverageMeter(10)
-    logztL_meter = log_utils.CachedRunningAverageMeter(10)
+    # logpL_meter = log_utils.CachedRunningAverageMeter(10)
+    # logztL_meter = log_utils.CachedRunningAverageMeter(10)
     mse_meter = log_utils.CachedAverageMeter()
     time_meter = log_utils.CachedAverageMeter()
 
@@ -165,7 +163,6 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam(odegpvae.parameters(),lr=args.lr)
 
     logger.info('********** Started Training **********')
-    if args.kl_0: logger.info("Set KLs to 0")
     begin = time.time()
     global_itr = 0
     [N,T,nc,d,d] = next(iter(trainset)).shape
@@ -173,7 +170,8 @@ if __name__ == '__main__':
         L = 1 if ep<args.Nepoch//2 else 5 # increasing L as optimization proceeds is a good practice
         for itr,local_batch in enumerate(trainset):
             minibatch = local_batch.to(args.device) # B x T x 1 x 28 x 28 (batch, time, image dim)
-            loss, nlhood, kl_reg, kl_u, logpL, log_pzt = compute_loss(odegpvae, minibatch, L, args)
+            #loss, nlhood, kl_reg, kl_u, logpL, log_pzt = compute_loss(odegpvae, minibatch, L, args)
+            loss, nlhood, kl_reg, kl_u = compute_loss(odegpvae, minibatch, L, args)
             if torch.isnan(loss):
                 logger.info('************** Obtained nan Loss at Epoch:{:4d}/{:4d}*************'.format(ep, args.Nepoch))
                 logger.info('Laoding previous model for plotting')
@@ -187,10 +185,6 @@ if __name__ == '__main__':
                 plot_results(odegpvae, trainset, testset, args, elbo_meter, nll_meter, reg_kl_meter, inducing_kl_meter, logpL_meter, logztL_meter)
                 sys.exit()
 
-            if args.kl_0:
-                kl_reg = kl_reg * 0.0
-                kl_u = kl_u * 0.0
-                loss = nlhood - kl_reg  - kl_u
             optimizer.zero_grad()
             loss.backward() 
             optimizer.step()
@@ -200,8 +194,6 @@ if __name__ == '__main__':
             nll_meter.update(nlhood.item(), global_itr)
             reg_kl_meter.update(kl_reg.item(), global_itr)
             inducing_kl_meter.update(kl_u.item(), global_itr)
-            logpL_meter.update(logpL.item(), global_itr)
-            logztL_meter.update(log_pzt.item(), global_itr)
             time_meter.update(time.time() - begin, global_itr)
             global_itr +=1
 
@@ -228,5 +220,5 @@ if __name__ == '__main__':
     logger.info("Kernel lengthscales {}".format(odegpvae.flow.odefunc.diffeq.kern.lengthscales.data))
     logger.info("Kernel variance {}".format(odegpvae.flow.odefunc.diffeq.kern.variance.data))
 
-    plot_results(odegpvae, trainset, testset, args, elbo_meter, nll_meter, reg_kl_meter, inducing_kl_meter, logpL_meter, logztL_meter)
-
+   # plot_results(odegpvae, trainset, testset, args, elbo_meter, nll_meter, reg_kl_meter, inducing_kl_meter, logpL_meter, logztL_meter)
+    plot_results(odegpvae, trainset, testset, args, elbo_meter, nll_meter, reg_kl_meter, inducing_kl_meter) #, logpL_meter, logztL_meter)

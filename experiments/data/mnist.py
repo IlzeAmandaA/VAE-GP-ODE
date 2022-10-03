@@ -55,3 +55,38 @@ def load_mnist_data(args, plot=True):
 		plt.savefig(os.path.join(args.save, 'plots/data.png'))
 		plt.close()
 	return trainset, testset
+
+
+def load_rotating_mnist_data(args, plot=True):
+	fullname = os.path.join(args.data_root, "rot_mnist", "rot-mnist.mat")
+	dataset = sio.loadmat(fullname)
+	
+	X = np.squeeze(dataset['X'])
+	if args.mask:
+		Y = np.squeeze(dataset['Y'])
+		X = X[Y==args.value,:,:]
+
+	N = args.Ndata
+	Nt = args.Ntest + N
+	T = args.T #16
+	Xtr   = torch.tensor(X[:N],dtype=torch.float32).view([N*T,1,28,28]) #Ndata*T, 1, nc, nc
+	Xtest = torch.tensor(X[N:Nt],dtype=torch.float32).view([args.Ntest*T,1,28,28]) #Ntest*T, 1, nc, nc
+
+	# Generators
+	params = {'batch_size': args.batch, 'shuffle': True, 'num_workers': 2} #20
+	trainset = Dataset(Xtr)
+	trainset = data.DataLoader(trainset, **params)
+	testset  = Dataset(Xtest)
+	testset  = data.DataLoader(testset, **params)
+
+
+	if plot:
+		x = next(iter(trainset))[:16]
+		fig, axs = plt.subplots(4, 4, figsize=(8, 8))
+		for ax, img in zip(axs.flat, x.cpu()):
+			ax.imshow(img.reshape(28, 28), cmap="gray")
+			ax.axis('off')
+		plt.savefig(os.path.join(args.save, 'plots/data.png'))
+		plt.close()
+
+	return trainset, testset
