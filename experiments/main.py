@@ -65,7 +65,7 @@ parser.add_argument('--T', type=int, default=16,
 parser.add_argument('--Ndata', type=int, default=360,
                     help="Number training data points")
 parser.add_argument('--Ntest', type=int, default=40,
-                    help="Number training data points")
+                    help="Number valid data points")
 parser.add_argument('--rotrand', type=eval, default=False,
                     help="if True multiple initial rotatio angles")
 
