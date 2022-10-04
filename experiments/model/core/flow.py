@@ -27,7 +27,7 @@ class ODEfunc(nn.Module):
     def num_evals(self):
         return self._num_evals.item()
 
-    def first_order(self, vs_logp):       
+    def first_order(self, sv):       
         '''
         trace computation based on: https://github.com/rtqichen/ffjord/blob/master/lib/layers/odefunc.py#L13
         '''
@@ -42,11 +42,10 @@ class ODEfunc(nn.Module):
         #     tr_ddvi_dvi = torch.sum(ddvi_dvi,1) # N
         #     return (dvs, -tr_ddvi_dvi)
         # else:
-        vs = vs_logp
-        dvs = self.diffeq(vs) # 25, 2q
-        return dvs
+        dsv = self.diffeq(sv) # 25, 2q
+        return dsv
 
-    def second_order(self, vs_logp):
+    def second_order(self, sv):
         # if self.trace:
         #     vs, logp = vs_logp
         #     q = vs.shape[1]//2
@@ -60,18 +59,17 @@ class ODEfunc(nn.Module):
         #     tr_ddvi_dvi = torch.sum(ddvi_dvi,1) # N
         #     return (dvs, -tr_ddvi_dvi)
         # else:
-        vs = vs_logp
-        q = vs.shape[1]//2
-        dv = self.diffeq(vs) # N,q
-        ds = vs[:,:q]  # N,q
-        return torch.cat([dv,ds],1) # N,2q  
+        q = sv.shape[1]//2
+        ds = sv[:,q:]  # N,q
+        dv = self.diffeq(sv) # N,q        
+        return torch.cat([ds,dv],1) # N,2q  
 
-    def forward(self, t, vs_logp): #this forward is my oderhs 
+    def forward(self, t, sv): #this forward is my oderhs 
         self._num_evals += 1
         if self.order == 1:
-            return self.first_order(vs_logp)
+            return self.first_order(sv)
         elif self.order == 2:
-            return self.second_order(vs_logp)
+            return self.second_order(sv)
 
 
 class Flow(nn.Module):

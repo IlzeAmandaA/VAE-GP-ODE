@@ -27,7 +27,7 @@ def sample_uniform(shape, seed=None):
         return torch.tensor(np.random.uniform(low=0.0, high=1.0, size=shape).astype(np.float32))
 
 
-class DSVGP_Layer(torch.nn.Module):
+class SVGP_Layer(torch.nn.Module):
     """
     A layer class implementing decoupled sampling of SVGP posterior
      @InProceedings{pmlr-v119-wilson20a,
@@ -53,7 +53,7 @@ class DSVGP_Layer(torch.nn.Module):
         @param q_diag: Diagonal approximation for inducing posterior
         @param dimwise: If True, different kernel parameters are given to output dimensions
         """
-        super(DSVGP_Layer, self).__init__()
+        super(SVGP_Layer, self).__init__()
 
         if kernel == 'RBF':
             self.kern = RBF(D_in, D_out, dimwise) 

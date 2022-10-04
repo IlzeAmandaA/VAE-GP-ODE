@@ -11,7 +11,7 @@ from model.core.distributions import Multivariate_Standard, log_normal_diag
 
 
 class VAE(nn.Module):
-    def __init__(self, steps = 1, n_filt=8, q=8, d=16, device='cpu', order=1, distribution='bernoulli'):
+    def __init__(self, steps = 1, n_filt=8, q=8, device='cpu', order=1, distribution='bernoulli'):
         super(VAE, self).__init__()
 
 
@@ -26,7 +26,7 @@ class VAE(nn.Module):
         self.decoder = Decoder(n_filt=n_filt, q=q, distribution=distribution)
 
         # prior 
-        self.prior = MultivariateNormal(torch.zeros(d).to(device), torch.eye(d).to(device)) # Multivariate_Standard(L=d, device=device)
+        self.prior = MultivariateNormal(torch.zeros(q).to(device), torch.eye(q).to(device)) # Multivariate_Standard(L=d, device=device)
 
 class Encoder(nn.Module):
     def __init__(self, steps = 1, n_filt=8, q=8):

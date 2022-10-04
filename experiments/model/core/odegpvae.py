@@ -55,7 +55,7 @@ class ODEGPVAE(nn.Module):
             Xrec = Xrec.view([L,N,T,nc,d,d]) # L,N,T,nc,d,d
         elif self.order == 2:
             q = ztL.shape[-1]//2
-            st_muL = ztL[:,:,:,q:] # L,N,T,q Only the position is decoded
+            st_muL = ztL[:,:,:,:q] # L,N,T,q Only the position is decoded
             Xrec = self.vae.decoder(st_muL) # L*N*T,nc,d,d
             Xrec = Xrec.view([L,N,T,nc,d,d]) # L,N,T,nc,d,d
         return Xrec
@@ -103,7 +103,7 @@ class ODEGPVAE(nn.Module):
         ztL   = torch.cat(ztL,0) # L,N,T,2q
         return ztL
 
-    def build_vae_terms(self, X, L, args):
+    def build_vae_terms(self, X, L):
         """
         Given observed states and time, builds the individual terms for the lowerbound computation
 
@@ -120,7 +120,7 @@ class ODEGPVAE(nn.Module):
         if self.order == 2:
             v0_mu, v0_logv = self.vae.encoder_v(torch.squeeze(X[:,0:self.v_steps]))
             v0 = self.vae.encoder_v.sample(mu= v0_mu, logvar = v0_logv)
-            z0 = torch.concat([v0,z0],dim=1) #N, 2q
+            z0 = torch.concat([z0,v0],dim=1) #N, 2q
 
         ztL = self.sample_trajectories(z0,T,L) # L,N,T,2q
 
@@ -152,7 +152,7 @@ class ODEGPVAE(nn.Module):
         if self.order == 2:
             v0_mu, v0_logv = self.vae.encoder_v(torch.squeeze(X[:,0:self.v_steps]))
             v0 = self.vae.encoder_v.sample(mu= v0_mu, logvar = v0_logv)
-            z0 = torch.concat([v0,z0],dim=1) #N, 2q
+            z0 = torch.concat([z0,v0],dim=1) #N, 2q
 
         #sample flow
         zt = self.build_flow(z0, T) # N,T,2q & None

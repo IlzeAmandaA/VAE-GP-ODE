@@ -5,7 +5,7 @@ from torch.utils import data
 import os
 import matplotlib.pyplot as plt
 plt.switch_backend('agg')
-from .utils import Dataset
+from .utils import Dataset, Dataset_labels
 
 def rot_start(Xtr, T, N ):
 	start_angle = np.random.randint(0,T,N)
@@ -69,24 +69,29 @@ def load_rotating_mnist_data(args, plot=True):
 	N = args.Ndata
 	Nt = args.Ntest + N
 	T = args.T #16
-	Xtr   = torch.tensor(X[:N],dtype=torch.float32).view([N*T,1,28,28]) #Ndata*T, 1, nc, nc
-	Xtest = torch.tensor(X[N:Nt],dtype=torch.float32).view([args.Ntest*T,1,28,28]) #Ntest*T, 1, nc, nc
+	Xtr   = torch.tensor(X[:N],dtype=torch.float32).reshape([N*T,1,28,28]) #Ndata*T, 1, nc, nc
+	Xtest = torch.tensor(X[N:Nt],dtype=torch.float32).reshape([args.Ntest*T,1,28,28]) #Ntest*T, 1, nc, nc
+
+	t = np.linspace(0, T - 1, T).astype(np.uint8).reshape((1, -1)) # 1, T
+	tr_t = np.repeat(t, Xtr.shape[0] // T, axis=0).reshape((-1, 1)) #Ndata*T,1
+	te_t = np.repeat(t, Xtest.shape[0] // T, axis=0).reshape((-1, 1)) #Ntest*T,1
 
 	# Generators
 	params = {'batch_size': args.batch, 'shuffle': True, 'num_workers': 2} #20
-	trainset = Dataset(Xtr)
+	trainset = Dataset_labels(Xtr, tr_t)
 	trainset = data.DataLoader(trainset, **params)
-	testset  = Dataset(Xtest)
+	testset  = Dataset_labels(Xtest, te_t)
 	testset  = data.DataLoader(testset, **params)
 
 
 	if plot:
-		x = next(iter(trainset))[:16]
+		x, _ = next(iter(trainset))[:16]
 		fig, axs = plt.subplots(4, 4, figsize=(8, 8))
 		for ax, img in zip(axs.flat, x.cpu()):
 			ax.imshow(img.reshape(28, 28), cmap="gray")
 			ax.axis('off')
 		plt.savefig(os.path.join(args.save, 'plots/data.png'))
 		plt.close()
+		print('labels', _)
 
 	return trainset, testset
