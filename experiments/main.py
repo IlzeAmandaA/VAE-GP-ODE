@@ -126,7 +126,6 @@ if __name__ == '__main__':
     seed_everything(args.seed)
 
     ########### device #######
-    #args.device = device
     logger.info('Running model on {}'.format(args.device))
 
     ########### data ############ 
@@ -152,8 +151,6 @@ if __name__ == '__main__':
     nll_meter = log_utils.CachedRunningAverageMeter(10)
     reg_kl_meter = log_utils.CachedRunningAverageMeter(10)
     inducing_kl_meter = log_utils.CachedRunningAverageMeter(10)
-    # logpL_meter = log_utils.CachedRunningAverageMeter(10)
-    # logztL_meter = log_utils.CachedRunningAverageMeter(10)
     mse_meter = log_utils.CachedAverageMeter()
     time_meter = log_utils.CachedAverageMeter()
 
@@ -163,7 +160,6 @@ if __name__ == '__main__':
     logger.info('********** Started Training **********')
     begin = time.time()
     global_itr = 0
-    [N,T,nc,d,d] = next(iter(trainset)).shape
     for ep in range(args.Nepoch):
         L = 1 if ep<args.Nepoch//2 else 5 
         for itr,local_batch in enumerate(trainset):
@@ -179,7 +175,7 @@ if __name__ == '__main__':
                 odegpvae.eval()
                 logger.info("Kernel lengthscales {}".format(odegpvae.flow.odefunc.diffeq.kern.lengthscales.data))
                 logger.info("Kernel variance {}".format(odegpvae.flow.odefunc.diffeq.kern.variance.data))
-                plot_results(odegpvae, trainset, testset, args, elbo_meter, nll_meter, reg_kl_meter, inducing_kl_meter) #, logpL_meter, logztL_meter)
+                plot_results(odegpvae, trainset, testset, args, elbo_meter, nll_meter, reg_kl_meter, inducing_kl_meter) 
                 sys.exit()
 
             optimizer.zero_grad()
@@ -217,5 +213,4 @@ if __name__ == '__main__':
     logger.info("Kernel lengthscales {}".format(odegpvae.flow.odefunc.diffeq.kern.lengthscales.data))
     logger.info("Kernel variance {}".format(odegpvae.flow.odefunc.diffeq.kern.variance.data))
 
-   # plot_results(odegpvae, trainset, testset, args, elbo_meter, nll_meter, reg_kl_meter, inducing_kl_meter, logpL_meter, logztL_meter)
-    plot_results(odegpvae, trainset, testset, args, elbo_meter, nll_meter, reg_kl_meter, inducing_kl_meter) #, logpL_meter, logztL_meter)
+    plot_results(odegpvae, trainset, testset, args, elbo_meter, nll_meter, reg_kl_meter, inducing_kl_meter) 

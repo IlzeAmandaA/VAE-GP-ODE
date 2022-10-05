@@ -118,8 +118,8 @@ class Decoder(nn.Module):
 
     def log_prob(self, x,z, L=1):
         '''
-        x           - input images [N,T,nc,d,d]
-        z           - reconstructions [L,N,T,nc,d,d]
+        x           - input images [N,T,1,nc,nc]
+        z           - reconstructions [L,N,T,1,nc,nc]
         '''
         XL = x.repeat([L,1,1,1,1,1]) # L,N,T,nc,d,d 
         if self.distribution == 'bernoulli':

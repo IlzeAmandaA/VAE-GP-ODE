@@ -1,3 +1,4 @@
+from cgi import test
 import os 
 import time
 from datetime import timedelta
@@ -200,12 +201,12 @@ if __name__ == '__main__':
         with torch.no_grad():
             mse_meter.reset()
             for itr_test,(test_batch, _) in enumerate(testset):
-                test_batch = test_batch.to(args.device)
+                test_batch = test_batch.to(args.device) #B,1,nc,nc
                 enc_mean, enc_logvar = vae.encoder_s(x)
                 z = vae.encoder_s.sample(enc_mean, enc_logvar)
-                Xrec = vae.decoder(z[None,:,None,:])
+                Xrec = vae.decoder(z[None,:,None,:]) #B,1,nc,nc
                 test_mse = torch.mean((Xrec-test_batch)**2)
-                plot_rot_mnist(test_batch, Xrec, False, fname=os.path.join(args.save, 'plots/rot_mnist.png'))
+                plot_rand_rot_mnist(test_batch, Xrec, False, fname=os.path.join(args.save, 'plots/rot_mnist.png'))
                 torch.save(vae.state_dict(), os.path.join(args.save, 'vae_mnist.pth'))
                 mse_meter.update(test_mse.item(),itr_test)
                 break
@@ -214,5 +215,6 @@ if __name__ == '__main__':
     logger.info('********** Training completed **********')
 
     plot_vae_embeddings(vae.encoder_s, testset, 100, args.device, n_classes=args.T, output_path=args.save)
+    plot_trace_vae(elbo_meter, nll_meter, reg_kl_meter, args) # logpL_meter, logztL_meter, args)
 
 
