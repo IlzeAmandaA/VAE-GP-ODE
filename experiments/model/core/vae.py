@@ -26,6 +26,7 @@ class VAE(nn.Module):
         self.decoder = Decoder(n_filt=n_filt, q=q, distribution=distribution)
 
         # prior 
+     
         self.prior = MultivariateNormal(torch.zeros(q).to(device), torch.eye(q).to(device)) # Multivariate_Standard(L=d, device=device)
 
 class Encoder(nn.Module):
@@ -72,7 +73,26 @@ class Encoder(nn.Module):
          
         covariance = torch.eye(q, q, device=std_.device).unsqueeze(0).repeat(N, 1, 1) * std_[:,None,:] #N,D,D
         mn = MultivariateNormal(means, covariance) #.to(z.device)
+        return mn.log_prob(z) 
+
+    def log_prob_vae(self, mu, logvar, z):
+        [N, q] = z.shape 
+        # print('logv', logvar.shape)
+        std_  = 1e-3+logvar.exp() #N,q
+        covariance = torch.eye(q, q, device=z.device).unsqueeze(0).repeat(N, 1, 1) * std_[:,:,None] #N,q,q
+        #mn = MultivariateNormal(mu, covariance) #.to(z.device)
+        mn = Normal(mu, std_)
         return mn.log_prob(z)
+
+    def kl_divergence(self, mean, logvar):
+        """
+        KL Divergence value between the input distribution specified with mean and logvar and N(0,I) considering
+        diagonal covariance.
+        """
+        var = torch.exp(logvar)
+        mean2 = mean * mean
+        loss = -0.5 * torch.mean(1 + logvar - mean2 - var)
+        return loss
 
 
 

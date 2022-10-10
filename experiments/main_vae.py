@@ -3,6 +3,7 @@ import os
 import time
 from datetime import timedelta
 import argparse
+import zipapp
 import torch
 import sys
 from datetime import datetime
@@ -173,10 +174,12 @@ if __name__ == '__main__':
             RE = RE.mean() 
 
             #KL regularizer
-            log_pz = vae.prior.log_prob(z) # L*N
-            log_q_enc = vae.encoder_s.log_prob(enc_mean, enc_logvar, None, None, z, 1) #N
-            KL_reg = (log_pz - log_q_enc) # N
-            KL_reg = KL_reg.mean()
+            KL_reg = vae.encoder_s.kl_divergence(enc_mean, enc_logvar)
+            # log_pz = vae.prior.log_prob(z) # N
+            # log_q_enc = vae.encoder_s.log_prob_vae(enc_mean, enc_logvar, z) #N, q
+            # #print(log_q_enc.shape)
+            # KL_reg = (log_pz - log_q_enc.sum(-1)) # N
+            # KL_reg = KL_reg.mean()
 
             loss = -(RE + KL_reg)
 
