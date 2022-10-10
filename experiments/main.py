@@ -6,7 +6,7 @@ import torch
 import sys
 from datetime import datetime
 from data.wrappers import load_data
-from model.create_model import build_model, compute_loss
+from model.create_model import build_model, compute_loss, compute_test_error
 from model.create_plots import plot_results
 from model.misc.plot_utils import *
 from model.misc import io_utils
@@ -19,31 +19,9 @@ SOLVERS = ["dopri5", "bdf", "rk4", "midpoint", "adams", "explicit_adams", "fixed
 KERNELS = ['RBF', 'DF']
 parser = argparse.ArgumentParser('Learning latent dyanmics with OdeVaeGP')
 
-# model parameters
-parser.add_argument('--num_features', type=int, default=256,
-                    help="Number of Fourier basis functions (for pathwise sampling from GP)")
-parser.add_argument('--num_inducing', type=int, default=100,
-                    help="Number of inducing points for the sparse GP")
-parser.add_argument('--variance', type=float, default=1.0,
-                    help="Initial value for rbf variance")
-parser.add_argument('--lengthscale', type=float, default=1.0,
-                    help="Initial value for rbf lengthscale")
-parser.add_argument('--dimwise', type=eval, default=True,
-                    help="Specify separate lengthscales for every output dimension")
-parser.add_argument('--q_diag', type=eval, default=False,
-                    help="Diagonal posterior approximation for inducing variables")
-parser.add_argument('--num_latents', type=int, default=5,
-                    help="Number of latent dimensions for training")
-# parser.add_argument('--trace', type=eval, default=False,
-#                     help="Compute trace")
+# model type parameters
 parser.add_argument('--order', type=int, default=2,
                     help="order of ODE")
-parser.add_argument('--continue_training', type=eval, default=False,
-                    help="If set to True continoues training of a previous model")
-parser.add_argument('--model_path', type=str, default='None',
-                    help="path from where to load previous model, should be of the form results/mnist_*/*.pth")
-
-
 
 # data processing arguments
 parser.add_argument('--data_root', type=str, default='data/',
@@ -75,6 +53,23 @@ parser.add_argument('--n_filt', type=int, default=8,
 parser.add_argument('--steps', type=int, default=5,
                     help="Number of timesteps used for encoding velocity")
 
+#gp arguments
+parser.add_argument('--kernel', type=str, default='RBF', choices=KERNELS,
+                    help="ODE solver for numerical integration")
+parser.add_argument('--num_features', type=int, default=256,
+                    help="Number of Fourier basis functions (for pathwise sampling from GP)")
+parser.add_argument('--num_inducing', type=int, default=100,
+                    help="Number of inducing points for the sparse GP")
+parser.add_argument('--variance', type=float, default=0.65,
+                    help="Initial value for rbf variance")
+parser.add_argument('--lengthscale', type=float, default=1.25,
+                    help="Initial value for rbf lengthscale")
+parser.add_argument('--dimwise', type=eval, default=True,
+                    help="Specify separate lengthscales for every output dimension")
+parser.add_argument('--q_diag', type=eval, default=False,
+                    help="Diagonal posterior approximation for inducing variables")
+                
+
 # ode solver arguments
 parser.add_argument('--D_in', type=int, default=16,
                     help="ODE f(x) input dimensionality")
@@ -86,10 +81,9 @@ parser.add_argument('--ts_dense_scale', type=int, default=2,
                     help="Factor for making a dense integration time grid (useful for explicit solvers)")
 parser.add_argument('--use_adjoint', type=eval, default=False,
                     help="Use adjoint method for gradient computation")
-parser.add_argument('--beta', type=int, default=1,
-                    help="Factor to scale the inducing KL loss effect")
-parser.add_argument('--kernel', type=str, default='RBF', choices=KERNELS,
-                    help="ODE solver for numerical integration")
+parser.add_argument('--dt', type=int, default=0.1,
+                    help="numerical solver dt")
+
 
 # training arguments
 parser.add_argument('--Nepoch', type=int, default=500, #10_000
@@ -106,11 +100,30 @@ parser.add_argument('--log_freq', type=int, default=5,
                     help="Logging frequency while training")
 parser.add_argument('--device', type=str, default='cuda:0',
                     help="device")
+parser.add_argument('--continue_training', type=eval, default=False,
+                    help="If set to True continoues training of a previous model")
+parser.add_argument('--model_path', type=str, default='None',
+                    help="path from where to load previous model, should be of the form results/mnist_*/*.pth")
+
 
 #plotting arguments
 parser.add_argument('--Troll', type=int, default=2,
-                    help="rollout")
+                    help="rollout") 
 
+def cache_results(logger, args, odegpvae, trainset, testset, elbo_meter, nll_meter, reg_kl_meter, inducing_kl_meter):
+    '''
+    save function if nan encountered during training 
+    '''
+    logger.info('************** Obtained nan Loss at Epoch:{:4d}/{:4d}*************'.format(ep, args.Nepoch))
+    logger.info('Laoding previous model for plotting')
+    fname = os.path.join(args.save, 'odegpvae_mnist.pth')
+    odegpvae = build_model(args)
+    odegpvae.to(args.device)
+    odegpvae.load_state_dict(torch.load(fname,map_location=torch.device(args.device)))
+    odegpvae.eval()
+    logger.info("Kernel lengthscales {}".format(odegpvae.flow.odefunc.diffeq.kern.lengthscales.data))
+    logger.info("Kernel variance {}".format(odegpvae.flow.odefunc.diffeq.kern.variance.data))
+    plot_results(odegpvae, trainset, testset, args, elbo_meter, nll_meter, reg_kl_meter, inducing_kl_meter) 
 
 if __name__ == '__main__':
     args = parser.parse_args()
@@ -137,11 +150,11 @@ if __name__ == '__main__':
     odegpvae = initialize_and_fix_kernel_parameters(odegpvae, lengthscale_value=args.lengthscale, variance_value=args.variance, fix=False) #1.25, 0.5, 0.65 0.25
 
     logger.info('********** Model Built {} ODE **********'.format(args.order))
-    logger.info('Model parameters: num features {} | num inducing {} | num epochs {} | lr {} | order {} | D_in {} | D_out {} | beta {} | kernel {} | latent_dim {} | variance {} |lengthscale {}'.format(
-                    args.num_features, args.num_inducing, args.Nepoch,args.lr, args.order, args.D_in, args.D_out, args.beta, args.kernel, args.q, args.variance, args.lengthscale))
+    logger.info('Model parameters: num features {} | num inducing {} | num epochs {} | lr {} | order {} | D_in {} | D_out {} | dt {} | kernel {} | latent_dim {} | variance {} |lengthscale {}'.format(
+                    args.num_features, args.num_inducing, args.Nepoch,args.lr, args.order, args.D_in, args.D_out, args.dt, args.kernel, args.q, args.variance, args.lengthscale))
 
     if args.continue_training:
-        fname = os.path.join(os.path.abspath(os.path.dirname(__file__)), args.model_path)
+        fname = os.path.join(os.path.abspath(os.path.dirname(__file__)), args.model_path, 'odegpvae_mnist.pth')
         odegpvae.load_state_dict(torch.load(fname,map_location=torch.device(args.device)))
         logger.info('Resume training for model {}'.format(fname))
 
@@ -165,17 +178,9 @@ if __name__ == '__main__':
         for itr,local_batch in enumerate(trainset):
             minibatch = local_batch.to(args.device) # B x T x 1 x 28 x 28 (batch, time, image dim)
             loss, nlhood, kl_reg, kl_u = compute_loss(odegpvae, minibatch, L)
+
             if torch.isnan(loss):
-                logger.info('************** Obtained nan Loss at Epoch:{:4d}/{:4d}*************'.format(ep, args.Nepoch))
-                logger.info('Laoding previous model for plotting')
-                fname = os.path.join(args.save, 'odegpvae_mnist.pth')
-                odegpvae = build_model(args)
-                odegpvae.to(args.device)
-                odegpvae.load_state_dict(torch.load(fname,map_location=torch.device(args.device)))
-                odegpvae.eval()
-                logger.info("Kernel lengthscales {}".format(odegpvae.flow.odefunc.diffeq.kern.lengthscales.data))
-                logger.info("Kernel variance {}".format(odegpvae.flow.odefunc.diffeq.kern.variance.data))
-                plot_results(odegpvae, trainset, testset, args, elbo_meter, nll_meter, reg_kl_meter, inducing_kl_meter) 
+                cache_results(logger, args, odegpvae, trainset, testset, elbo_meter, nll_meter, reg_kl_meter, inducing_kl_meter)
                 sys.exit()
 
             optimizer.zero_grad()
@@ -202,8 +207,10 @@ if __name__ == '__main__':
             mse_meter.reset()
             for itr_test,test_batch in enumerate(testset):
                 test_batch = test_batch.to(args.device)
-                Xrec_mu, test_mse = odegpvae(test_batch)
-                plot_rot_mnist(test_batch, Xrec_mu.squeeze(0), False, fname=os.path.join(args.save, 'plots/rot_mnist.png'))
+                Xrec, _, _ = odegpvae(test_batch)
+                Xrec = Xrec.squeeze(0) #N,T,d,nc,nc
+                test_mse = compute_test_error(test_batch, Xrec)
+                plot_rot_mnist(test_batch, Xrec, False, fname=os.path.join(args.save, 'plots/rot_mnist.png'))
                 torch.save(odegpvae.state_dict(), os.path.join(args.save, 'odegpvae_mnist.pth'))
                 mse_meter.update(test_mse.item(),itr_test)
                 break

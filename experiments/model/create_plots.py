@@ -16,5 +16,5 @@ def plot_results(odegpvae, trainset, testset, args, elbo_meter, nll_meter, reg_k
     with torch.no_grad():
         test_batch = next(iter(testset))[:3,:].to(args.device) #sample 3 images
         plot_data(test_batch, fname=os.path.join(args.save, 'plots/rollout_original.png'), size=3)
-        Xrec_mu, test_mse = odegpvae(test_batch, args.Troll*args.T)
+        Xrec_mu, _, _ = odegpvae(test_batch, T_custom=args.Troll*args.T)
         plot_rollout(Xrec_mu,fname=os.path.join(args.save, 'plots/rollout.png'))

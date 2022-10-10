@@ -2,6 +2,9 @@ from model.core.svpy import SVGP_Layer
 from model.core.flow import Flow
 from model.core.vae import VAE  
 from model.core.odegpvae import ODEGPVAE
+import torch
+from torch.distributions import kl_divergence as kl
+
 
 def build_model(args):
     """
@@ -20,29 +23,58 @@ def build_model(args):
 
     flow = Flow(diffeq=gp, order=args.order, solver=args.solver, use_adjoint=args.use_adjoint)
 
-    vae = VAE(steps = args.steps, n_filt=args.n_filt, q=args.q, order= args.order, device=args.device, distribution='bernoulli')
+    vae = VAE(steps = args.steps, n_filt=args.n_filt, q=args.q, D_in=args.D_in ,order= args.order, device=args.device, distribution='bernoulli')
 
     odegpvae = ODEGPVAE(flow=flow,
                         vae= vae,
                         num_observations= args.Ndata,
                         order = args.order,
                         ts_dense_scale=args.ts_dense_scale,
-                        beta=args.beta,
-                        steps=args.steps)
+                        steps=args.steps,
+                        dt = args.dt)
 
     return odegpvae
 
+def elbo(model, X, Xrec, s0_mu, s0_logv, v0_mu, v0_logv,L):
+    ''' Input:
+            qz_m        - latent means [N,2q]
+            qz_logv     - latent logvars [N,2q]
+            X           - input images [L,N,T,nc,d,d]
+            Xrec        - reconstructions [L,N,T,nc,d,d]
+        Returns:
+            likelihood
+            kl terms
+    '''
+    # KL reg
+    q = model.vae.encoder_s.q_dist(s0_mu, s0_logv, v0_mu, v0_logv)
+    kl_reg = kl(q, model.vae.prior).sum(-1) #N
+
+    #Reconstruction log-likelihood
+    lhood = model.vae.decoder.log_prob(X,Xrec,L) #L,N,T,d,nc,nc
+    lhood = lhood.sum([2,3,4,5]).mean(0) #N
+
+    # KL inudcing
+    kl_u = model.flow.kl()
+
+    return lhood.mean(), kl_reg.mean(), kl_u 
+
+
 def compute_loss(model, data, L):
     """
-    Compute loss for ODEGPVAE optimization
+    Compute loss for optimization
     @param model: a odegpvae object
     @param data: true observation sequence 
     @param L: number of MC samples
     @param Ndata: number of training data points 
-    @return: loss, nll, initial_state_kl, inducing_kl
+    @return: loss, nll, regularizing_kl, inducing_kl
     """
-    RE, KL_reg = model.build_vae_terms(data, L)
-    KL_u = model.build_kl() 
-    loss = - (RE * model.num_observations  + KL_reg * model.num_observations  - model.beta*KL_u) 
-    return loss, -RE, KL_reg, KL_u 
+    Xrec,(s0_mu, s0_logv), (v0_mu, v0_logv) = model(data,L)
+    lhood, kl_reg, kl_gp = elbo(model, data, Xrec, s0_mu, s0_logv, v0_mu, v0_logv,L)
+    loss = - (lhood * model.num_observations - kl_reg * model.num_observations - kl_gp)
+    return loss, -lhood, kl_reg, kl_gp
+
+def compute_test_error(X, Xrec):
+    assert list(X.shape) == list(Xrec.shape), f'incorrect shapes X: {list(X.shape)}, X_Rec: {list(Xrec.shape)}'
+    return torch.mean((Xrec-X)**2)
+
 

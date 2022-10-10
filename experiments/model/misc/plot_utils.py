@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import os
+from sklearn.manifold import TSNE
 
 def plot_data(x, fname='plots/data.png', size=6):
     X = x.detach().cpu().numpy()
@@ -16,8 +17,8 @@ def plot_data(x, fname='plots/data.png', size=6):
 
 
 def plot_rollout(Xrec, show=False, fname='future.png'):
-    [N, T, d, nc, nc] =Xrec.shape #3,48, 
-    Xrecnp = Xrec.detach().cpu().numpy()
+    [L, N, T, d, nc, nc] =Xrec.shape  
+    Xrecnp = Xrec.squeeze(0).detach().cpu().numpy()
     plt.figure(1, (T,N))
     for i in range(N):
         for t in range(T):
@@ -85,7 +86,7 @@ def plot_latent_dynamics(model, data, args, fname):
         v0_mu, v0_logv = model.vae.encoder_v(torch.squeeze(data[:,0:model.v_steps]))
         v0 = model.vae.encoder_v.sample(mu= v0_mu, logvar = v0_logv)
         z0 = torch.concat([z0,v0],dim=1) #N, 2q
-    zt = model.build_flow(z0, T)
+    zt = model.sample_trajectories(z0,T).squeeze(0) # N,T,2q
     if args.order == 1:
         plot_latent_state(zt, show=False, fname=fname)
     elif args.order ==2:
@@ -168,17 +169,17 @@ def plot_trace(elbo_meter, nll_meter,  z_kl_meter, inducing_kl_meter, args, make
                     bbox_inches='tight', pad_inches=0.01)
         plt.close(fig)
 
-
 def plot_vae_embeddings(encoder, dataloader, n_samples, device, n_classes=16, output_path=None):
     """Visualize the embeddings in the latent space"""
     # classes = list(np.linspace(0, n_classes-1, n_classes).astype(np.str))
     n = 0
     codes, labels = [], []
     with torch.no_grad():
+        encoder.eval()
         for b_inputs, b_labels in dataloader:
             batch_size = b_inputs.size(0)
             b_codes = encoder(b_inputs.to(device))[0]
-            #b_codes, b_labels = b_codes.cpu().data.numpy(), b_labels.cpu().data.numpy()
+            b_codes, b_labels = b_codes.cpu().data.numpy(), b_labels.cpu().data.numpy()
             if n + batch_size > n_samples:
                 codes.append(b_codes[: n_samples - n])
                 labels.append(b_labels[: n_samples - n])
@@ -187,21 +188,16 @@ def plot_vae_embeddings(encoder, dataloader, n_samples, device, n_classes=16, ou
                 codes.append(b_codes)
                 labels.append(b_labels)
                 n += batch_size
-    #codes = np.vstack(codes)
-    codes = torch.cat(codes) # n_samples, q
-    labels = torch.cat(labels) # n_samples
-    labels = labels.cpu().numpy()
+    codes = np.vstack(codes)
     if codes.shape[1] > 2:
-        #do PCA here 
-        U,S,V = torch.pca_lowrank(codes)
-        codes = codes@V[:,:2] # n_samples, 2
-        codes = codes.cpu().numpy()
-        #codes = TSNE().fit_transform(codes)
-   # labels = np.hstack(labels)
+        codes = TSNE().fit_transform(codes)
+    labels = np.hstack(labels)
+
     fig, ax = plt.subplots(1)
     pos = ax.get_position()
     ax.set_position([pos.x0, pos.y0, pos.width * 0.8, pos.height], which="both")
     color_map = plt.cm.get_cmap('hsv', n_classes)
+
     for iclass in range(min(labels), max(labels) + 1):
         ix = labels == iclass
         ax.plot(codes[ix, 0], codes[ix, 1], ".", c=color_map(iclass))
@@ -212,7 +208,52 @@ def plot_vae_embeddings(encoder, dataloader, n_samples, device, n_classes=16, ou
     if output_path is None:
         plt.show()
     else:
-        plt.savefig(os.path.join(output_path, "plots/latent-embeddings.png"))
+        plt.savefig(os.path.join(output_path, "latent-embeddings.png"))
+
+# def plot_vae_embeddings(encoder, dataloader, n_samples, device, n_classes=16, output_path=None):
+#     """Visualize the embeddings in the latent space"""
+#     # classes = list(np.linspace(0, n_classes-1, n_classes).astype(np.str))
+#     n = 0
+#     codes, labels = [], []
+#     with torch.no_grad():
+#         for b_inputs, b_labels in dataloader:
+#             batch_size = b_inputs.size(0)
+#             b_codes = encoder(b_inputs.to(device))[0]
+#             #b_codes, b_labels = b_codes.cpu().data.numpy(), b_labels.cpu().data.numpy()
+#             if n + batch_size > n_samples:
+#                 codes.append(b_codes[: n_samples - n])
+#                 labels.append(b_labels[: n_samples - n])
+#                 break
+#             else:
+#                 codes.append(b_codes)
+#                 labels.append(b_labels)
+#                 n += batch_size
+#     #codes = np.vstack(codes)
+#     codes = torch.cat(codes) # n_samples, q
+#     labels = torch.cat(labels) # n_samples
+#     labels = labels.cpu().numpy()
+#     if codes.shape[1] > 2:
+#         #do PCA here 
+#         U,S,V = torch.pca_lowrank(codes)
+#         codes = codes@V[:,:2] # n_samples, 2
+#         codes = codes.cpu().numpy()
+#         #codes = TSNE().fit_transform(codes)
+#    # labels = np.hstack(labels)
+#     fig, ax = plt.subplots(1)
+#     pos = ax.get_position()
+#     ax.set_position([pos.x0, pos.y0, pos.width * 0.8, pos.height], which="both")
+#     color_map = plt.cm.get_cmap('hsv', n_classes)
+#     for iclass in range(min(labels), max(labels) + 1):
+#         ix = labels == iclass
+#         ax.plot(codes[ix, 0], codes[ix, 1], ".", c=color_map(iclass))
+
+#     # plt.legend(classes, bbox_to_anchor=(1.05, 1), loc="upper left", borderaxespad=0.0)
+#     plt.tight_layout()
+#     plt.suptitle("Latent embeddings of a sample datapoint using HSV colorcode", y=1)
+#     if output_path is None:
+#         plt.show()
+#     else:
+#         plt.savefig(os.path.join(output_path, "plots/latent-embeddings.png"))
 
 def plot_trace_vae(elbo_meter, nll_meter,  z_kl_meter, args, make_plot=False): 
     fig, axs = plt.subplots(1, 3, figsize=(20, 8))

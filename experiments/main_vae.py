@@ -5,50 +5,34 @@ from datetime import timedelta
 import argparse
 import zipapp
 import torch
+import torch.nn as nn
 import sys
 from datetime import datetime
-from data.mnist import load_rotating_mnist_data
+from data.mnist import load_rotating_mnist_data, create_rotating_dataset
 from model.core.vae import VAE
 
-from model.create_model import build_model, compute_loss
-from model.create_plots import plot_results
 from model.misc.plot_utils import *
 from model.misc import io_utils
 from model.misc import log_utils 
 from model.misc.torch_utils import seed_everything
 from model.misc.settings import settings
-from model.core.initialization import initialize_and_fix_kernel_parameters
+
+
+from torch.distributions import kl_divergence as kl
 
 SOLVERS = ["dopri5", "bdf", "rk4", "midpoint", "adams", "explicit_adams", "fixed_adams"]
 KERNELS = ['RBF', 'DF']
 parser = argparse.ArgumentParser('Learning Latent Encoding with VAE')
 
 # model parameters
-parser.add_argument('--num_features', type=int, default=256,
-                    help="Number of Fourier basis functions (for pathwise sampling from GP)")
-parser.add_argument('--num_inducing', type=int, default=100,
-                    help="Number of inducing points for the sparse GP")
-parser.add_argument('--variance', type=float, default=0.5,
-                    help="Initial value for rbf variance")
-parser.add_argument('--lengthscale', type=float, default=1.3,
-                    help="Initial value for rbf lengthscale")
-parser.add_argument('--dimwise', type=eval, default=True,
-                    help="Specify separate lengthscales for every output dimension")
-parser.add_argument('--q_diag', type=eval, default=False,
-                    help="Diagonal posterior approximation for inducing variables")
-parser.add_argument('--num_latents', type=int, default=5,
-                    help="Number of latent dimensions for training")
-parser.add_argument('--trace', type=eval, default=True,
-                    help="Compute trace")
-parser.add_argument('--kl_0', type=eval, default=False,
-                    help="Specifies to set initial KL to 0")
-parser.add_argument('--order', type=int, default=2,
+parser.add_argument('--weight', type=int, default=1,
+                    help="lhood weight")
+parser.add_argument('--order', type=int, default=1,
                     help="order of ODE")
 parser.add_argument('--continue_training', type=eval, default=False,
                     help="If set to True continoues training of a previous model")
 parser.add_argument('--model_path', type=str, default='None',
                     help="path from where to load previous model, should be of the form results/mnist_*/*.pth")
-
 
 
 # data processing arguments
@@ -62,7 +46,7 @@ parser.add_argument('--value', type=int, default=3,
                     help="training choice")
 parser.add_argument('--data_seqlen', type=int, default=100,
                     help="Training sequence length")
-parser.add_argument('--batch', type=int, default=40,
+parser.add_argument('--batch', type=int, default=64,
                     help="batch size")
 parser.add_argument('--T', type=int, default=16,
                     help="Number of time points")
@@ -74,7 +58,7 @@ parser.add_argument('--rotrand', type=eval, default=False,
                     help="if True multiple initial rotatio angles")
 
 #vae arguments
-parser.add_argument('--q', type=int, default=8,
+parser.add_argument('--q', type=int, default=16,
                     help="Latent space dimensionality")
 parser.add_argument('--n_filt', type=int, default=8,
                     help="Number of filters in the cnn")
@@ -113,10 +97,24 @@ parser.add_argument('--log_freq', type=int, default=20,
 parser.add_argument('--device', type=str, default='cuda:0',
                     help="device")
 
+parser.add_argument('--output_path', type=str, default='experiments/data/moving_mnist',
+                    help="device")
+parser.add_argument('--n_angle', type=int, default=64,
+                    help="device")
+
 #plotting arguments
 parser.add_argument('--Tlong', type=int, default=3,
                     help="future prediction")
 
+def kl_divergence(mean, logvar):
+    """
+    KL Divergence value between the input distribution specified with mean and logvar and N(0,I) considering
+    diagonal covariance.
+    """
+    var = torch.exp(logvar)
+    mean2 = mean * mean
+    loss = -0.5 * torch.mean(1 + logvar - mean2 - var)
+    return loss
 
 if __name__ == '__main__':
     args = parser.parse_args()
@@ -137,13 +135,30 @@ if __name__ == '__main__':
     ########### device #######
     #args.device = device
     logger.info('Running model on {}'.format(args.device))
+    logger.info('Model parameters:  num epochs {} | lr {} | latent_dim {} |'.format(
+                     args.Nepoch,args.lr, args.q))
+
 
     ########### data ############ 
-    trainset, testset = load_rotating_mnist_data(args, plot=True) 
+    rotating_mnist_train_dataset = os.path.join(args.output_path, "rotating_mnist_train_3_64_angles.npy")
+    rotating_mnist_test_dataset = os.path.join(args.output_path, "rotating_mnist_test_3_64_angles.npy")
+
+    if os.path.exists(rotating_mnist_train_dataset) and os.path.exists(rotating_mnist_test_dataset):
+        train_rotated_imgs = np.load(rotating_mnist_train_dataset)
+        test_rotated_imgs = np.load(rotating_mnist_test_dataset)
+    else:
+        train_rotated_imgs, test_rotated_imgs = create_rotating_dataset(args.output_path, digit=args.value, train_n=args.Ndata,
+                                                                        test_n=args.Ntest, n_angles=args.n_angle)
+        np.save(rotating_mnist_train_dataset, train_rotated_imgs)
+        np.save(rotating_mnist_test_dataset, test_rotated_imgs)
+
+
+    trainset = load_rotating_mnist_data(rotating_mnist_train_dataset, args)
+    testset = load_rotating_mnist_data(rotating_mnist_test_dataset, args, plot=False)
     vae_model_path = os.path.join(args.save, "MNIST-VAE")
 
     ########### model ###########
-    vae = VAE(steps = args.steps, n_filt=args.n_filt, q=args.q, order= args.order, device=args.device, distribution='bernoulli')
+    vae = VAE(steps = args.steps, n_filt=args.n_filt, q=args.q, D_in=args.q, order= args.order, device=args.device, distribution='bernoulli')
     vae.to(args.device)
 
     ########### log loss values ########
@@ -158,30 +173,35 @@ if __name__ == '__main__':
     logger.info('********** Started Training **********')
     begin = time.time()
     global_itr = 0
+    bce = nn.BCELoss(reduction="mean")
     for ep in range(args.Nepoch):
         running_loss = []
-        vae.encoder_s.train()
-        vae.decoder.train()
+        vae.train()
         for itr,(local_batch, _) in enumerate(trainset):
-            x = local_batch.to(args.device) # B x 1 x nc x  nc (batch, image dim)
+            x = local_batch.to(args.device) # B x d x nc x  nc (batch, image dim)
             enc_mean, enc_logvar = vae.encoder_s(x)
             z = vae.encoder_s.sample(enc_mean, enc_logvar) #B,q
-            Xrec = vae.decoder(z[None,:,None,:])  #B,1,nc,nc
-
-
+            #Xrec = vae.decoder(z[None,:,None,:])  #B, d, nc, nc
+            Xrec = vae.decoder(z)
             #Reconstruction log-likelihood
-            RE = vae.decoder.log_prob(x[:,None],Xrec[None,:,None],1) # N
-            RE = RE.mean() 
+            # lhood = vae.decoder.log_prob(x,Xrec,1) # L,T,N,d,nc,nc
+            # lhood = lhood.sum([0,1,3,4,5]) #N
+            
+            lhood = bce(Xrec,x)
+            #lhood = lhood.mean([0,1,3,4,5]) #N
 
-            #KL regularizer
-            KL_reg = vae.encoder_s.kl_divergence(enc_mean, enc_logvar)
-            # log_pz = vae.prior.log_prob(z) # N
-            # log_q_enc = vae.encoder_s.log_prob_vae(enc_mean, enc_logvar, z) #N, q
-            # #print(log_q_enc.shape)
-            # KL_reg = (log_pz - log_q_enc.sum(-1)) # N
-            # KL_reg = KL_reg.mean()
+            # KL reg
+            # q = vae.encoder_s.q_dist(enc_mean, enc_logvar)
+            # kl_reg = kl(q, vae.prior).sum(-1) #N
+            kl_reg = kl_divergence(enc_mean, enc_logvar)
 
-            loss = -(RE + KL_reg)
+
+            #lhood = lhood.mean()
+            #kl_reg = kl_reg.mean()
+
+            #loss = - (lhood - kl_reg)
+            #loss = lhood*args.Ndata + kl_reg*args.Ndata
+            loss = lhood*1000 + kl_reg
 
             optimizer.zero_grad()
             loss.backward() 
@@ -189,8 +209,9 @@ if __name__ == '__main__':
 
             #store values 
             elbo_meter.update(loss.item(), global_itr)
-            nll_meter.update(-RE.item(), global_itr)
-            reg_kl_meter.update(KL_reg.item(), global_itr)
+            #nll_meter.update(-lhood.item(), global_itr)
+            nll_meter.update(lhood.item(), global_itr)
+            reg_kl_meter.update(kl_reg.item(), global_itr)
             time_meter.update(time.time() - begin, global_itr)
             global_itr +=1
 
@@ -202,12 +223,14 @@ if __name__ == '__main__':
                                 reg_kl_meter.val, reg_kl_meter.avg)) 
         
         with torch.no_grad():
+            vae.eval()
             mse_meter.reset()
             for itr_test,(test_batch, _) in enumerate(testset):
                 test_batch = test_batch.to(args.device) #B,1,nc,nc
                 enc_mean, enc_logvar = vae.encoder_s(x)
                 z = vae.encoder_s.sample(enc_mean, enc_logvar)
-                Xrec = vae.decoder(z[None,:,None,:]) #B,1,nc,nc
+                #Xrec = vae.decoder(z[None,:,None,:]) #B,1,nc,nc
+                Xrec = vae.decoder(z)
                 test_mse = torch.mean((Xrec-test_batch)**2)
                 plot_rand_rot_mnist(test_batch, Xrec, False, fname=os.path.join(args.save, 'plots/rot_mnist.png'))
                 torch.save(vae.state_dict(), os.path.join(args.save, 'vae_mnist.pth'))
@@ -219,5 +242,6 @@ if __name__ == '__main__':
 
     plot_vae_embeddings(vae.encoder_s, testset, 100, args.device, n_classes=args.T, output_path=args.save)
     plot_trace_vae(elbo_meter, nll_meter, reg_kl_meter, args) # logpL_meter, logztL_meter, args)
+    print('created plots')
 
 
