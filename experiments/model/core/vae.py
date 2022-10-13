@@ -1,38 +1,42 @@
 import torch
 import torch.nn as nn
 from torch.distributions import Normal
-from functools import reduce
+from torchsummary import summary
 from model.misc.torch_utils import Flatten, UnFlatten
 
 EPSILON = 1e-3
 
 class VAE(nn.Module):
-    def __init__(self, steps = 1, n_filt=8, q=8, D_in=16, device='cpu', order=1, distribution='bernoulli'):
+    def __init__(self, frames = 1, n_filt=8, latent_dim=8, device='cpu', order=1, distribution='bernoulli'):
         super(VAE, self).__init__()
 
 
-        # encoder position
-        self.encoder_s = Encoder(steps= 1, n_filt=n_filt, q=q)
+        self.encoder = Encoder(latent_dim, n_filt).to(device)
+        self.decoder = Decoder(latent_dim,  n_filt, distribution).to(device)
+        self.prior =  Normal(torch.zeros(latent_dim).to(device), torch.ones(latent_dim).to(device))
+        if order==2:
+            self.encoder_v = Encoder(latent_dim,  n_filt, frames).to(device)
+            self.prior = Normal(torch.zeros(latent_dim*2).to(device), torch.ones(latent_dim*2).to(device))
+        
+        self.latent_dim = latent_dim
+        self.order = order
 
-        if order == 2:
-            # encoder velocity
-            self.encoder_v = Encoder(steps = steps, n_filt=n_filt, q=q)
+    def print_summary(self):
+        """Print the summary of both the models: encoder and decoder"""
+        summary(self.encoder, (1, *(28,28)))
+        summary(self.decoder, (1, self.latent_dim))
+        if self.order==2:
+            summary(self.encoder_v, (1,*(28,28)))
 
-        # decoder
-        self.decoder = Decoder(n_filt=n_filt, q=q, distribution=distribution)
-
-        # prior 
-     
-        self.prior = Normal(torch.zeros(D_in).to(device), torch.ones(D_in).to(device))
 
 class Encoder(nn.Module):
-    def __init__(self, steps = 1, n_filt=8, q=8):
+    def __init__(self,  latent_dim=16, n_filt=8,frames=1):
         super(Encoder, self).__init__()
 
-        h_dim = n_filt*4**3 # encoder output is [4*n_filt,4,4]
+        in_features = n_filt*4**3 # encoder output is [4*n_filt,4,4]
 
         self.cnn = nn.Sequential(
-            nn.Conv2d(steps, n_filt, kernel_size=5, stride=2, padding=(2,2)), # 14,14
+            nn.Conv2d(frames, n_filt, kernel_size=5, stride=2, padding=(2,2)), # 14,14
             nn.BatchNorm2d(n_filt),
             nn.ReLU(),
             nn.Conv2d(n_filt, n_filt*2, kernel_size=5, stride=2, padding=(2,2)), # 7,7
@@ -43,21 +47,9 @@ class Encoder(nn.Module):
             Flatten()
         )
 
-        # self.cnn = nn.Sequential(
-        #     nn.Conv2d(in_channels=1, out_channels=4, kernel_size=3, stride=1),
-        #     nn.ReLU(),
-        #     nn.Conv2d(in_channels=4, out_channels=8, kernel_size=3, stride=1),
-        #     nn.ReLU(),
-        #     nn.Flatten()
-        # )
 
-        # in_features = 8 * reduce(lambda x, y: (x - 4) * (y - 4), (28,28))
-
-        self.fc1 = nn.Linear(h_dim, q)
-        self.fc2 = nn.Linear(h_dim, q)
-
-        # self.fc1 = nn.Linear(in_features, q)
-        # self.fc2 = nn.Linear(in_features, q)
+        self.fc1 = nn.Linear(in_features,latent_dim)
+        self.fc2 = nn.Linear(in_features, latent_dim)
 
     def forward(self, x):
         h = self.cnn(x)
@@ -78,9 +70,9 @@ class Encoder(nn.Module):
             means = mu_s
             log_v = logvar_s
 
-        try:
-            std_ = nn.functional.softplus(log_v)
-        except:
+        
+        std_ = nn.functional.softplus(log_v)
+        if torch.isnan(std_).any():
             std_ = EPSILON + nn.functional.softplus(log_v)
 
         return Normal(means, std_) #N,q
@@ -91,13 +83,13 @@ class Encoder(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, n_filt=8, q=8, distribution = 'bernoulli'):
+    def __init__(self, latent_dim=16,n_filt=8, distribution='bernoulli'):
         super(Decoder, self).__init__()
 
         self.distribution = distribution
 
         h_dim = n_filt*4**3 # encoder output is [4*n_filt,4,4]
-        self.fc = nn.Linear(q, h_dim)
+        self.fc = nn.Linear(latent_dim, h_dim)
 
         self.decnn = nn.Sequential(
             UnFlatten(4),
@@ -114,22 +106,8 @@ class Decoder(nn.Module):
             nn.Sigmoid(),
         )
 
-        # out_features = 8 * reduce(lambda x, y: (x - 4) * (y - 4), (28,28))
-        # self.decnn = nn.Sequential(
-        #     nn.ConvTranspose2d(in_channels=8, out_channels=4, kernel_size=3, stride=1),
-        #     nn.ReLU(),
-        #     nn.ConvTranspose2d(in_channels=4, out_channels=1, kernel_size=3, stride=1),
-        #     nn.Sigmoid()
-        # )
-        # self.fc = nn.Linear(q, out_features)
-        # self.relu = nn.ReLU()
 
     def forward(self, x):
-        
-        #x= self.fc(x)
-        # x = self.relu(x)
-        # img_shapes = [x - 4 for x in (28,28)]
-        # x = x.reshape(x.shape[0], 8, *img_shapes)
         L,N,T,q = x.shape
         s = self.fc(x.contiguous().view([L*N*T,q]) ) # N*T,q
         h = self.decnn(s)

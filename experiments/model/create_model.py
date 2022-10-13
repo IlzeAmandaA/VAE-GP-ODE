@@ -23,14 +23,14 @@ def build_model(args):
 
     flow = Flow(diffeq=gp, order=args.order, solver=args.solver, use_adjoint=args.use_adjoint)
 
-    vae = VAE(steps = args.steps, n_filt=args.n_filt, q=args.q, D_in=args.D_in ,order= args.order, device=args.device, distribution='bernoulli')
+    vae = VAE(frames = args.frames, n_filt=args.n_filt, latent_dim=args.q ,order= args.order, device=args.device)
 
     odegpvae = ODEGPVAE(flow=flow,
                         vae= vae,
                         num_observations= args.Ndata,
                         order = args.order,
                         ts_dense_scale=args.ts_dense_scale,
-                        steps=args.steps,
+                        steps=args.frames,
                         dt = args.dt)
 
     return odegpvae
@@ -46,7 +46,7 @@ def elbo(model, X, Xrec, s0_mu, s0_logv, v0_mu, v0_logv,L):
             kl terms
     '''
     # KL reg
-    q = model.vae.encoder_s.q_dist(s0_mu, s0_logv, v0_mu, v0_logv)
+    q = model.vae.encoder.q_dist(s0_mu, s0_logv, v0_mu, v0_logv)
     kl_reg = kl(q, model.vae.prior).sum(-1) #N
 
     #Reconstruction log-likelihood

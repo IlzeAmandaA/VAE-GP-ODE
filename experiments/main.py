@@ -50,7 +50,7 @@ parser.add_argument('--q', type=int, default=8,
                     help="Latent space dimensionality")
 parser.add_argument('--n_filt', type=int, default=8,
                     help="Number of filters in the cnn")
-parser.add_argument('--steps', type=int, default=5,
+parser.add_argument('--frames', type=int, default=5,
                     help="Number of timesteps used for encoding velocity")
 
 #gp arguments
@@ -81,7 +81,7 @@ parser.add_argument('--ts_dense_scale', type=int, default=2,
                     help="Factor for making a dense integration time grid (useful for explicit solvers)")
 parser.add_argument('--use_adjoint', type=eval, default=False,
                     help="Use adjoint method for gradient computation")
-parser.add_argument('--dt', type=int, default=0.1,
+parser.add_argument('--dt', type=float, default=0.1,
                     help="numerical solver dt")
 
 

@@ -79,8 +79,8 @@ def plot_rand_rot_mnist(X, Xrec, show=False, fname='rot_mnist.png', rows=4):
 
 def plot_latent_dynamics(model, data, args, fname):
     [N,T,nc,d,d] = data.shape
-    s0_mu, s0_logv = model.vae.encoder_s(data[:,0]) #N,q
-    z0 = model.vae.encoder_s.sample(mu = s0_mu, logvar = s0_logv)
+    s0_mu, s0_logv = model.vae.encoder(data[:,0]) #N,q
+    z0 = model.vae.encoder.sample(mu = s0_mu, logvar = s0_logv)
     v0_mu, v0_logv = None, None
     if model.order == 2:
         v0_mu, v0_logv = model.vae.encoder_v(torch.squeeze(data[:,0:model.v_steps]))
@@ -97,11 +97,14 @@ def plot_latent_dynamics(model, data, args, fname):
 
 def plot_latent_state(st_mu, show=False, fname='latent_dyanamics'):
     N,T,q = st_mu.shape
-    st_mu = st_mu.detach() # N,T,q
-    st_mu = st_mu.reshape(N*T,q) #NT,q
-    U,S,V = torch.pca_lowrank(st_mu)
-    st_pca = st_mu@V[:,:2] 
-    st_pca =  st_pca.reshape(N,T,2).cpu().numpy() # N,T,2
+    st_mu = st_mu.detach() # N,T,q   
+    if q<2:
+        st_mu = st_mu.reshape(N*T,q) #NT,q
+        U,S,V = torch.pca_lowrank(st_mu)
+        st_pca = st_mu@V[:,:2] 
+        st_pca =  st_pca.reshape(N,T,2).cpu().numpy() # N,T,2
+    else:
+        st_pca = st_mu.cpu().numpy()
     plt.figure(1,(5,5))
     for n in range(N):
         p, = plt.plot(st_pca[n,0,0],st_pca[n,0,1],'o',markersize=10)
@@ -121,10 +124,13 @@ def plot_latent_state(st_mu, show=False, fname='latent_dyanamics'):
 def plot_latent_velocity(vt_mu, show=False, fname='latent_dyanamics'):
     N,T,q = vt_mu.shape
     vt_mu = vt_mu.detach() # N,T,q
-    vt_mu = vt_mu.reshape(N*T,q) #NT,q
-    U,S,V = torch.pca_lowrank(vt_mu)
-    vt_pca = vt_mu@V[:,:2] 
-    vt_pca =  vt_pca.reshape(N,T,2).cpu().numpy() # N,T,2
+    if q>2:
+        vt_mu = vt_mu.reshape(N*T,q) #NT,q
+        U,S,V = torch.pca_lowrank(vt_mu)
+        vt_pca = vt_mu@V[:,:2] 
+        vt_pca =  vt_pca.reshape(N,T,2).cpu().numpy() # N,T,2
+    else:
+        vt_pca = vt_mu.cpu().numpy()
     ts = [t for t in range(T)]
     fig, (ax1,ax2) = plt.subplots(nrows=1, ncols=2,figsize=(16, 8))
     fig.suptitle("Latent Dynamics", fontsize=18, y=0.95)

@@ -54,8 +54,8 @@ class ODEGPVAE(nn.Module):
             T = T_custom
 
         #encode
-        s0_mu, s0_logv = self.vae.encoder_s(X[:,0]) #N,q
-        z0 = self.vae.encoder_s.sample(mu = s0_mu, logvar = s0_logv)
+        s0_mu, s0_logv = self.vae.encoder(X[:,0]) #N,q
+        z0 = self.vae.encoder.sample(mu = s0_mu, logvar = s0_logv)
         v0_mu, v0_logv = None, None
         if self.order == 2:
             v0_mu, v0_logv = self.vae.encoder_v(torch.squeeze(X[:,0:self.v_steps]))
