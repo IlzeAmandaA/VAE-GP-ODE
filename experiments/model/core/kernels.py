@@ -85,7 +85,6 @@ class RBF(torch.nn.Module):
         @param X2: Input 2 (M,D_in)
         @return: Tensor (N,M)
         """
-       # print('l',self.lengthscales.shape )
         X = X / self.lengthscales  # (N,D_in)
         Xs = torch.sum(torch.pow(X, 2), dim=1)  # (N,)
         if X2 is None:
@@ -201,19 +200,46 @@ class Periodic(torch.nn.Module):
 
 class DivergenceFreeKernel(RBF):
     def __init__(self, D_in, D_out):
-        super(DivergenceFreeKernel, self).__init__(D_in=D_in, D_out=D_out,dimwise=False)
+        super(DivergenceFreeKernel, self).__init__(D_in=D_in, D_out=D_out,dimwise=True)
+
+    # def difference_matrix(self, X, X2=None):
+    #     '''
+    #     Computes (X-X2)
+    #     '''
+    #     X = (X / self.lengthscales).unsqueeze(-1)  # (N,D_in,1)
+    #     if X2 is None:
+    #         X2=X
+    #     else:
+    #         X2 = (X2 / self.lengthscales).unsqueeze(-1)# (M,D_in,1)
+    #     X2 = torch.permute(X2, (2,1,0)) # (1, D_in, M)
+    #     return torch.subtract(X,X2)  #N,D_in,M
+
+    def square_dist(self, X, X2=None):
+        """
+        Computes squared euclidean distance
+        @param X: Input 1 (N,D_in)
+        @param X2: Input 2 (M,D_in)
+        @return: Tensor (N,M)
+        """
+        Xs = torch.sum(torch.pow(X, 2), dim=1)  # (N,)
+        if X2 is None:
+            return -2 * torch.matmul(X, X.t()) + \
+                   torch.reshape(Xs, (-1, 1)) + torch.reshape(Xs, (1, -1))  # (N,1)
+        else:
+            X2s = torch.sum(torch.pow(X2, 2), dim=1)  # (M,)
+            return -2 * torch.matmul(X, X2.t()) + torch.reshape(Xs, (-1, 1)) + torch.reshape(X2s, (1, -1))  # (N,M)
+
 
     def difference_matrix(self, X, X2=None):
         '''
         Computes (X-X2)
+        X: N,D
+        X2: M,D
+        Return: diff: D,N,M
         '''
-        X = (X / self.lengthscales).unsqueeze(-1)  # (N,D_in,1)
         if X2 is None:
             X2=X
-        else:
-            X2 = (X2 / self.lengthscales).unsqueeze(-1)# (M,D_in,1)
-        X2 = torch.permute(X2, (2,1,0)) # (1, D_in, M)
-        return torch.subtract(X,X2)  #N,D_in,M
+        return torch.subtract(X2.T[:,None,:],X.T[:,:,None])  #D,N,M
     
     def eye_like(self, X, d:int, X2=None) -> torch.Tensor:
         """
@@ -224,7 +250,7 @@ class DivergenceFreeKernel(RBF):
             @param X2:  Input 2 (M,D_in)
             @param n: Input dimensions
         Returns:
-            tensor of shape (N, M, n, n) that has the same dtype and device as x.
+            tensor of shape (N, M, d, d) that has the same dtype and device as x.
         """
         N = X.shape[0]
         M = X2.shape[0] if X2 != None else N
@@ -243,19 +269,35 @@ class DivergenceFreeKernel(RBF):
         @param X2:  Input 2 (M,D_in)
         @return: Tensor (N,M,D_in,D_in)
         """
-        sq_dist = self.square_dist(X, X2)  # (N,M)
-        rbf_term = self.variance * torch.exp(-0.5 * sq_dist)[:,:,None,None]  # (N,M, 1,1)
-        diff = self.difference_matrix(X,X2) #(N,D_in,M)
+        # sq_dist = self.square_dist(X, X2)  # (N,M)
+        # rbf_term = self.variance * torch.exp(-0.5 * sq_dist)[:,:,None,None]  # (N,M, 1,1)
+        # diff = self.difference_matrix(X,X2) #(N,D_in,M)
         
-        diff1 = torch.permute(diff.unsqueeze(-1), (0,2,1,3)) # (N, M, D_in, 1)
-        diff2 = torch.permute(diff.unsqueeze(-1), (0,2,3,1)) # (N, M, 1, D_in)
-        term1 = torch.multiply(diff1, diff2) #N,M, D_in, D_in
+        # diff1 = torch.permute(diff.unsqueeze(-1), (0,2,1,3)) # (N, M, D_in, 1)
+        # diff2 = torch.permute(diff.unsqueeze(-1), (0,2,3,1)) # (N, M, 1, D_in)
+        # term1 = torch.multiply(diff1, diff2) #N,M, D_in, D_in
 
 
-        term2 = torch.multiply(((self.D_in - 1.0) - sq_dist)[:,:,None,None], self.eye_like(X,self.D_in,X2)) #N,M,D_in, D_in
-        hes_term  = term1 + term2  #or minus 
+        # term2 = torch.multiply(((self.D_in - 1.0) - sq_dist)[:,:,None,None], self.eye_like(X,self.D_in,X2)) #N,M,D_in, D_in
+        # hes_term  = term1 + term2  #or minus 
 
-        K = rbf_term * hes_term / torch.square(self.lengthscales)
+        # K = rbf_term * hes_term / torch.square(self.lengthscales)
+        # K = self.reshape(torch.permute(K, (0,2,1,3)), X, X2)
+  
+        # return K #(N*D_in, M*D_in) 
+
+        sq_dist = self.square_dist(X,X2) # (N,M)
+        scaled_sq = 1/(2*self.lengthscales.pow(2)) * sq_dist[:,:,None,None] # (N,M,D,D)
+        rbf_term = self.variance * torch.exp(-scaled_sq)  # (N,M,D,D)
+
+
+        diff = self.difference_matrix(X,X2) #D,N,M
+        term1 = 1/self.lengthscales.pow(2)*torch.multiply(diff[:,None,:,:],diff[None,:,:,:]).permute((2,3,0,1)) #N,M,D,D
+
+        term2 = ((self.D_in-1.0)-(1/self.lengthscales.pow(2))*sq_dist[:,:,None,None]) *torch.eye(self.D_in, device=sq_dist.device)[None,None,:,:] #N,M,D,D
+        hes_term  = term1 + term2  #N,M,D,D
+
+        K = rbf_term * hes_term / self.lengthscales.pow(2) #N,M,D,D
         K = self.reshape(torch.permute(K, (0,2,1,3)), X, X2)
   
         return K #(N*D_in, M*D_in) 
@@ -269,8 +311,8 @@ class DivergenceFreeKernel(RBF):
         """
         # generate parameters required for the Fourier feature maps
         self.rff_weights = sample_normal((2*S, self.D_out)).to(device)  # (2S,D_out)
-        self.rff_omega = self.sample_freq(S, device=device)  # (D_in,S) or (D_in,S,D_out)
-        phase_shape = (1, S, self.D_out) if self.dimwise else (1, S)
+        self.rff_omega = self.sample_freq(S, device=device)  # D,S,D 
+        phase_shape = (1, S, self.D_out)
         self.rff_phase = sample_uniform(phase_shape).to(device) * 2 * np.pi  # (S,D_out)
 
 
@@ -282,28 +324,54 @@ class DivergenceFreeKernel(RBF):
         according to http://proceedings.mlr.press/v63/Brault39.pdf derivation of ORRF for Div-free
         """
         #compute B^*(omega)
-        rff_omega_1 = torch.permute(self.rff_omega.unsqueeze(-1), (1,0,2)) #S,D,1
-        rff_omega_2 = torch.permute(self.rff_omega.unsqueeze(-1), (1,2,0)) #S,1,D
-        norm = torch.sqrt(self.rff_omega.pow(2).sum(dim=0))[:,None,None] #we assume norm2 #S,1,1
+        rff_omega_1 = self.rff_omega.permute(1,0,2) # S,D,D
+        rff_omega_2 = self.rff_omega.permute(1,2,0) # S,D,D
+        norm = torch.sqrt(self.rff_omega.pow(2).sum(dim=0))[:,None] #l2 norm #S,D,D
+        #norm = self.rff_omega.abs().sum(dim=0)[:,None]  #l1 norm #S,D,D
         w_w = rff_omega_1 @ rff_omega_2 #S,D,D
         term1 = w_w/norm #S,D,D
 
-        I_m = torch.eye(self.D_in, device=self.rff_omega.device).unsqueeze(0).repeat(S, 1, 1) #S,D,D
-        b_omega = norm*I_m - term1 #(S, D_in, D_in)
-        B_omega = torch.cat((b_omega, b_omega),0) #2S, D_in, D_in
+        # I_m = torch.eye(self.D_in, device=self.rff_omega.device).unsqueeze(0).repeat(S, 1, 1) #S,D,D
+        # b_omega = norm*I_m - term1 #(S, D, D)
+        b_omega = norm * torch.eye(self.D_in, device=norm.device)[None,:] - term1
+        B_omega = torch.cat((b_omega, b_omega),0) #2S, D, D
 
         # compute feature map
-        xo = torch.einsum('nd,df->nf', x, self.rff_omega)  # (N,S) 
-        phi_cos = torch.cos(xo + self.rff_phase)  # (N,S) 
-        phi_sin = torch.sin(xo + self.rff_phase)  # (N,S)
-        phi_ = torch.cat((phi_cos, phi_sin), 1)[:,:,None,None] #N,2S
-        phi_ =  phi_ * B_omega.unsqueeze(0) # N, 2S, D_in, D_in
-        phi = phi_ * torch.sqrt(self.variance / S)  # N, 2S, D_in, D_in
+        xo = torch.einsum('nd,dfk->nfk', x, self.rff_omega)  # (N,S,D)
+        phi_cos = torch.cos(xo + self.rff_phase)  # (N,S,D)
+        phi_sin = torch.sin(xo + self.rff_phase)  # (N,S,D)
+        phi_ = torch.cat((phi_cos, phi_sin), 1).unsqueeze(-1) #N,2S,D,1
+
+        phi_ =  phi_ * B_omega.unsqueeze(0) # N, 2S, D, D
+        phi = phi_ * torch.sqrt(self.variance / S)  # N, 2S, D, D
 
         # compute function values
         f = (phi * self.rff_weights[None,:,:,None]).sum([1,2]) # N, 2S, D, D 
 
         return f  # N, D 
+        # #compute B^*(omega)
+        # rff_omega_1 = torch.permute(self.rff_omega.unsqueeze(-1), (1,0,2)) #S,D,1
+        # rff_omega_2 = torch.permute(self.rff_omega.unsqueeze(-1), (1,2,0)) #S,1,D
+        # norm = torch.sqrt(self.rff_omega.pow(2).sum(dim=0))[:,None,None] #we assume norm2 #S,1,1
+        # w_w = rff_omega_1 @ rff_omega_2 #S,D,D
+        # term1 = w_w/norm #S,D,D
+
+        # I_m = torch.eye(self.D_in, device=self.rff_omega.device).unsqueeze(0).repeat(S, 1, 1) #S,D,D
+        # b_omega = norm*I_m - term1 #(S, D_in, D_in)
+        # B_omega = torch.cat((b_omega, b_omega),0) #2S, D_in, D_in
+
+        # # compute feature map
+        # xo = torch.einsum('nd,df->nf', x, self.rff_omega)  # (N,S) 
+        # phi_cos = torch.cos(xo + self.rff_phase)  # (N,S) 
+        # phi_sin = torch.sin(xo + self.rff_phase)  # (N,S)
+        # phi_ = torch.cat((phi_cos, phi_sin), 1)[:,:,None,None] #N,2S
+        # phi_ =  phi_ * B_omega.unsqueeze(0) # N, 2S, D_in, D_in
+        # phi = phi_ * torch.sqrt(self.variance / S)  # N, 2S, D_in, D_in
+
+        # # compute function values
+        # f = (phi * self.rff_weights[None,:,:,None]).sum([1,2]) # N, 2S, D, D 
+
+        # return f  # N, D 
 
     def compute_nu(self,Ku, u_prior,inducing_val):
         '''
