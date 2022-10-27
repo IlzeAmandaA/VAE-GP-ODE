@@ -150,8 +150,8 @@ if __name__ == '__main__':
     odegpvae = initialize_and_fix_kernel_parameters(odegpvae, lengthscale_value=args.lengthscale, variance_value=args.variance, fix=False) #1.25, 0.5, 0.65 0.25
 
     logger.info('********** Model Built {} ODE **********'.format(args.order))
-    logger.info('Model parameters: num features {} | num inducing {} | num epochs {} | lr {} | order {} | D_in {} | D_out {} | dt {} | kernel {} | latent_dim {} | variance {} |lengthscale {}'.format(
-                    args.num_features, args.num_inducing, args.Nepoch,args.lr, args.order, args.D_in, args.D_out, args.dt, args.kernel, args.q, args.variance, args.lengthscale))
+    logger.info('Model parameters: num features {} | num inducing {} | num epochs {} | lr {} | order {} | D_in {} | D_out {} | dt {} | kernel {} | latent_dim {} | variance {} |lengthscale {} | rotated initial angle {}'.format(
+                    args.num_features, args.num_inducing, args.Nepoch,args.lr, args.order, args.D_in, args.D_out, args.dt, args.kernel, args.q, args.variance, args.lengthscale, args.rotrand))
 
     if args.continue_training:
         fname = os.path.join(os.path.abspath(os.path.dirname(__file__)), args.model_path, 'odegpvae_mnist.pth')
