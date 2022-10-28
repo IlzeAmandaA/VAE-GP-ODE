@@ -60,9 +60,9 @@ parser.add_argument('--num_features', type=int, default=256,
                     help="Number of Fourier basis functions (for pathwise sampling from GP)")
 parser.add_argument('--num_inducing', type=int, default=100,
                     help="Number of inducing points for the sparse GP")
-parser.add_argument('--variance', type=float, default=0.65,
+parser.add_argument('--variance', type=float, default=1.0, #based on rbf see plot dyanmics for model repo link
                     help="Initial value for rbf variance")
-parser.add_argument('--lengthscale', type=float, default=1.25,
+parser.add_argument('--lengthscale', type=float, default=2.0,
                     help="Initial value for rbf lengthscale")
 parser.add_argument('--dimwise', type=eval, default=True,
                     help="Specify separate lengthscales for every output dimension")
@@ -86,7 +86,7 @@ parser.add_argument('--dt', type=float, default=0.1,
 
 
 # training arguments
-parser.add_argument('--Nepoch', type=int, default=300, #10_000
+parser.add_argument('--Nepoch', type=int, default=600, #10_000
                     help="Number of gradient steps for model training")
 parser.add_argument('--lr', type=float, default=0.001,
                     help="Learning rate for model training")
@@ -154,6 +154,18 @@ if __name__ == '__main__':
     odegpvae.vae.decoder.load_state_dict(torch.load(fname+'/decoder.pt',map_location=torch.device(args.device)))
     for var in odegpvae.vae.parameters():
         var.requires_grad=False
+        odegpvae.vae.encoder.eval()
+        odegpvae.vae.decoder.eval()
+    
+    logger.info('***** Loaded pretrained VAE ********')
+    logger.info('VAE weights:')
+     
+    param_dict = {}
+    for name, param in odegpvae.vae.named_parameters():
+        if param.requires_grad == False:
+            param_dict[name] = param.data[0]
+            logger.info('name {}, values {}'.format(name, param.data[0].detach().cpu().numpy()))
+
 
     odegpvae = initialize_and_fix_kernel_parameters(odegpvae, lengthscale_value=args.lengthscale, variance_value=args.variance, fix=False) #1.25, 0.5, 0.65 0.25
 
@@ -210,6 +222,11 @@ if __name__ == '__main__':
                                 nll_meter.val, nll_meter.avg,
                                 reg_kl_meter.val, reg_kl_meter.avg,
                                 inducing_kl_meter.val, inducing_kl_meter.avg)) 
+
+                for name, param in odegpvae.vae.named_parameters():
+                    if param.requires_grad == False:
+                        assert torch.equal(param_dict[name], param.data[0]), logger.info(name, param.data[0])
+
 
         with torch.no_grad():
             mse_meter.reset()
