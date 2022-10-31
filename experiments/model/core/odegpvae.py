@@ -5,12 +5,11 @@ from torch.distributions import kl_divergence as kl
 
 # model implementation
 class ODEGPVAE(nn.Module):
-    def __init__(self, flow, vae, num_observations, steps, order=2, ts_dense_scale=1, dt=0.1):
+    def __init__(self, flow, vae, num_observations, steps, order=2, dt=0.1):
         super(ODEGPVAE, self).__init__()
 
         self.flow = flow #Dynamics 
         self.num_observations = num_observations
-        self.ts_dense_scale = ts_dense_scale
         self.vae = vae
         self.dt = dt
         self.v_steps = steps

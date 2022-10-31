@@ -19,10 +19,6 @@ SOLVERS = ["dopri5", "bdf", "rk4", "midpoint", "adams", "explicit_adams", "fixed
 KERNELS = ['RBF', 'DF']
 parser = argparse.ArgumentParser('Learning latent dyanmics with OdeVaeGP')
 
-# model type parameters
-parser.add_argument('--order', type=int, default=2,
-                    help="order of ODE")
-
 # data processing arguments
 parser.add_argument('--data_root', type=str, default='data/',
                     help="Data location")
@@ -42,16 +38,20 @@ parser.add_argument('--Ndata', type=int, default=360,
                     help="Number training data points")
 parser.add_argument('--Ntest', type=int, default=40,
                     help="Number valid data points")
-parser.add_argument('--rotrand', type=eval, default=False,
+parser.add_argument('--rotrand', type=eval, default=True,
                     help="if True multiple initial rotatio angles")
 
 #vae arguments
-parser.add_argument('--q', type=int, default=8,
+parser.add_argument('--latent_dim', type=int, default=6,
                     help="Latent space dimensionality")
 parser.add_argument('--n_filt', type=int, default=8,
                     help="Number of filters in the cnn")
 parser.add_argument('--frames', type=int, default=5,
                     help="Number of timesteps used for encoding velocity")
+parser.add_argument('--pretrained', type=eval, default=False,
+                    help='wheather to load pretrained vae')
+parser.add_argument('--vae_path', type=str, default='results/vae/vae_31_10_2022-10:32/MNIST-VAE',
+                    help="pretrained VAE model path")
 
 #gp arguments
 parser.add_argument('--kernel', type=str, default='RBF', choices=KERNELS,
@@ -60,20 +60,23 @@ parser.add_argument('--num_features', type=int, default=256,
                     help="Number of Fourier basis functions (for pathwise sampling from GP)")
 parser.add_argument('--num_inducing', type=int, default=100,
                     help="Number of inducing points for the sparse GP")
-parser.add_argument('--variance', type=float, default=0.65,
-                    help="Initial value for rbf variance")
-parser.add_argument('--lengthscale', type=float, default=1.25,
-                    help="Initial value for rbf lengthscale")
 parser.add_argument('--dimwise', type=eval, default=True,
                     help="Specify separate lengthscales for every output dimension")
+parser.add_argument('--variance', type=float, default=1.0,
+                    help="Initial value for rbf variance")
+parser.add_argument('--lengthscale', type=float, default=2.0,
+                    help="Initial value for rbf lengthscale")
+
 parser.add_argument('--q_diag', type=eval, default=False,
                     help="Diagonal posterior approximation for inducing variables")
                 
 
 # ode solver arguments
-parser.add_argument('--D_in', type=int, default=16,
+parser.add_argument('--ode', type=int, default=1,
+                    help="order of ODE")
+parser.add_argument('--D_in', type=int, default=6,
                     help="ODE f(x) input dimensionality")
-parser.add_argument('--D_out', type=int, default=8,
+parser.add_argument('--D_out', type=int, default=6,
                     help="ODE f(x) output dimensionality")
 parser.add_argument('--solver', type=str, default='euler', choices=SOLVERS,
                     help="ODE solver for numerical integration")
@@ -86,7 +89,7 @@ parser.add_argument('--dt', type=float, default=0.1,
 
 
 # training arguments
-parser.add_argument('--Nepoch', type=int, default=500, #10_000
+parser.add_argument('--Nepoch', type=int, default=5000,
                     help="Number of gradient steps for model training")
 parser.add_argument('--lr', type=float, default=0.001,
                     help="Learning rate for model training")
@@ -148,10 +151,28 @@ if __name__ == '__main__':
     odegpvae = build_model(args)
     odegpvae.to(args.device)
     odegpvae = initialize_and_fix_kernel_parameters(odegpvae, lengthscale_value=args.lengthscale, variance_value=args.variance, fix=False) #1.25, 0.5, 0.65 0.25
+    
 
-    logger.info('********** Model Built {} ODE **********'.format(args.order))
-    logger.info('Model parameters: num features {} | num inducing {} | num epochs {} | lr {} | order {} | D_in {} | D_out {} | dt {} | kernel {} | latent_dim {} | variance {} |lengthscale {} | rotated initial angle {}'.format(
-                    args.num_features, args.num_inducing, args.Nepoch,args.lr, args.order, args.D_in, args.D_out, args.dt, args.kernel, args.q, args.variance, args.lengthscale, args.rotrand))
+    #### load pre-trained VAE ######
+    if args.pretrained:
+        odegpvae.vae.encoder.load_state_dict(torch.load(args.vae_path+'/encoder.pt',map_location=torch.device(args.device)))
+        odegpvae.vae.decoder.load_state_dict(torch.load(args.vae_path+'/decoder.pt',map_location=torch.device(args.device)))
+        for var in odegpvae.vae.parameters():
+            var.requires_grad=False
+            odegpvae.vae.encoder.eval()
+            odegpvae.vae.decoder.eval()
+        
+        param_dict = {}
+        for name, param in odegpvae.vae.named_parameters():
+            if param.requires_grad == False:
+                param_dict[name] = param.data[0]
+    
+        logger.info('***** Loaded pretrained VAE from {} ********'.format(args.vae_path))
+
+
+    logger.info('********** Model Built {} ODE **********'.format(args.ode))
+    logger.info('Model parameters: num features {} | num inducing {} | num epochs {} | lr {} | ode {} | D_in {} | D_out {} | dt {} | kernel {} | latent_dim {} | variance {} |lengthscale {} | rotated initial angle {}'.format(
+                    args.num_features, args.num_inducing, args.Nepoch,args.lr, args.ode, args.D_in, args.D_out, args.dt, args.kernel, args.latent_dim, args.variance, args.lengthscale, args.rotrand))
 
     if args.continue_training:
         fname = os.path.join(os.path.abspath(os.path.dirname(__file__)), args.model_path, 'odegpvae_mnist.pth')
@@ -202,6 +223,12 @@ if __name__ == '__main__':
                                 nll_meter.val, nll_meter.avg,
                                 reg_kl_meter.val, reg_kl_meter.avg,
                                 inducing_kl_meter.val, inducing_kl_meter.avg)) 
+
+                #sanity check that VAE parameter weights are not updated during training     
+                if args.pretrained:
+                    for name, param in odegpvae.vae.named_parameters():
+                        if param.requires_grad == False:
+                            assert torch.equal(param_dict[name], param.data[0]), logger.info(name, param.data[0])
 
         with torch.no_grad():
             mse_meter.reset()

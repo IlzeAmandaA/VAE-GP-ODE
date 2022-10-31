@@ -21,15 +21,14 @@ def build_model(args):
                      device= args.device,
                      kernel = args.kernel)
 
-    flow = Flow(diffeq=gp, order=args.order, solver=args.solver, use_adjoint=args.use_adjoint)
+    flow = Flow(diffeq=gp, order=args.ode, solver=args.solver, use_adjoint=args.use_adjoint)
 
-    vae = VAE(frames = args.frames, n_filt=args.n_filt, latent_dim=args.q ,order= args.order, device=args.device)
+    vae = VAE(frames = args.frames, n_filt=args.n_filt, latent_dim=args.latent_dim ,order= args.ode, device=args.device)
 
     odegpvae = ODEGPVAE(flow=flow,
                         vae= vae,
                         num_observations= args.Ndata,
-                        order = args.order,
-                        ts_dense_scale=args.ts_dense_scale,
+                        order = args.ode,
                         steps=args.frames,
                         dt = args.dt)
 
