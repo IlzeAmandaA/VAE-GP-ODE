@@ -50,7 +50,7 @@ parser.add_argument('--frames', type=int, default=5,
                     help="Number of timesteps used for encoding velocity")
 parser.add_argument('--pretrained', type=eval, default=False,
                     help='wheather to load pretrained vae')
-parser.add_argument('--vae_path', type=str, default='results/vae/vae_31_10_2022-10:32/MNIST-VAE',
+parser.add_argument('--vae_path', type=str, default='results/vae_31_10_2022-10:32/MNIST-VAE',
                     help="pretrained VAE model path")
 
 #gp arguments
