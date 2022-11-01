@@ -89,7 +89,7 @@ parser.add_argument('--dt', type=float, default=0.1,
 
 
 # training arguments
-parser.add_argument('--Nepoch', type=int, default=5000,
+parser.add_argument('--Nepoch', type=int, default=10000,
                     help="Number of gradient steps for model training")
 parser.add_argument('--lr', type=float, default=0.001,
                     help="Learning rate for model training")
@@ -113,7 +113,7 @@ parser.add_argument('--model_path', type=str, default='None',
 parser.add_argument('--Troll', type=int, default=2,
                     help="rollout") 
 
-def cache_results(logger, args, odegpvae, trainset, testset, elbo_meter, nll_meter, reg_kl_meter, inducing_kl_meter):
+def cache_results(logger, args, odegpvae, trainset, testset, elbo_meter, nll_meter, reg_kl_meter, inducing_kl_meter, hyperparam_meter):
     '''
     save function if nan encountered during training 
     '''
@@ -126,7 +126,7 @@ def cache_results(logger, args, odegpvae, trainset, testset, elbo_meter, nll_met
     odegpvae.eval()
     logger.info("Kernel lengthscales {}".format(odegpvae.flow.odefunc.diffeq.kern.lengthscales.data))
     logger.info("Kernel variance {}".format(odegpvae.flow.odefunc.diffeq.kern.variance.data))
-    plot_results(odegpvae, trainset, testset, args, elbo_meter, nll_meter, reg_kl_meter, inducing_kl_meter) 
+    plot_results(odegpvae, trainset, testset, args, elbo_meter, nll_meter, reg_kl_meter, inducing_kl_meter, hyperparam_meter)
 
 if __name__ == '__main__':
     args = parser.parse_args()
@@ -202,7 +202,7 @@ if __name__ == '__main__':
             loss, nlhood, kl_reg, kl_u = compute_loss(odegpvae, minibatch, L)
 
             if torch.isnan(loss):
-                cache_results(logger, args, odegpvae, trainset, testset, elbo_meter, nll_meter, reg_kl_meter, inducing_kl_meter)
+                cache_results(logger, args, odegpvae, trainset, testset, elbo_meter, nll_meter, reg_kl_meter, inducing_kl_meter,  hyperparam_meter) 
                 sys.exit()
 
             optimizer.zero_grad()
