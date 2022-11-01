@@ -87,11 +87,11 @@ def plot_latent_dynamics(model, data, args, fname):
         v0 = model.vae.encoder_v.sample(mu= v0_mu, logvar = v0_logv)
         z0 = torch.concat([z0,v0],dim=1) #N, 2q
     zt = model.sample_trajectories(z0,T).squeeze(0) # N,T,2q
-    if args.order == 1:
+    if args.ode == 1:
         plot_latent_state(zt, show=False, fname=fname)
-    elif args.order ==2:
-        st_mu = zt[:,:,:args.q] # N,T,q
-        vt_mu = zt[:,:,args.q:] # N,T,q
+    elif args.ode ==2:
+        st_mu = zt[:,:,:args.latent_dim] # N,T,q
+        vt_mu = zt[:,:,args.latent_dim:] # N,T,q
         plot_latent_state(st_mu, show=False, fname=fname)
         plot_latent_velocity(vt_mu, show=False, fname=fname)
 
