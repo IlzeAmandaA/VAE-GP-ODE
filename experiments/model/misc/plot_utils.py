@@ -151,6 +151,24 @@ def plot_latent_velocity(vt_mu, show=False, fname='latent_dyanamics'):
         plt.savefig(fname+'_velocity.png')
         plt.close()
 
+def plot_params(hyperparam_meter, args, show=False):
+    values = np.array(hyperparam_meter.vals)
+    plt.figure(1,(12,6))
+    for n in range(args.D_out):
+        plt.plot(hyperparam_meter.iters,values[:,n])
+
+    plt.ylabel('hyperparameter value',fontsize=15)
+    plt.xlabel('iterations',fontsize=15)
+    plt.title('Variance updates',fontsize=18)
+    plt.grid()
+    plt.tight_layout()
+    if show:
+        plt.show()
+    else:
+        plt.savefig(os.path.join(args.save, 'plots/hyperparam_trace.png'))
+        plt.close()
+
+
 def plot_trace(elbo_meter, nll_meter,  z_kl_meter, inducing_kl_meter, args, make_plot=False): 
     fig, axs = plt.subplots(2, 2, figsize=(20, 16))
 
@@ -174,6 +192,11 @@ def plot_trace(elbo_meter, nll_meter,  z_kl_meter, inducing_kl_meter, args, make
         fig.savefig(os.path.join(args.save, 'plots/optimization_trace.png'), dpi=160,
                     bbox_inches='tight', pad_inches=0.01)
         plt.close(fig)
+        np.save(os.path.join(args.save, 'elbo.npy'), np.stack((elbo_meter.iters, elbo_meter.vals), axis=1))
+        np.save(os.path.join(args.save, 'nll.npy'), np.stack((nll_meter.iters, nll_meter.vals), axis=1))
+        np.save(os.path.join(args.save, 'zkl.npy'), np.stack((z_kl_meter.iters, z_kl_meter.vals), axis=1))
+        np.save(os.path.join(args.save, 'inducingkl.npy'), np.stack((inducing_kl_meter.iters,inducing_kl_meter.vals), axis=1))
+
 
 def plot_vae_embeddings(encoder, dataloader, n_samples, device, n_classes=16, output_path=None):
     """Visualize the embeddings in the latent space"""

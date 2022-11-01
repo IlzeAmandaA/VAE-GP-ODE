@@ -1,6 +1,22 @@
 from re import S
 import numpy as np
 
+class CachedHyperparametrs(object):
+    """Stored the hyperparameter values of the GP"""
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.vals = []
+        self.iters = []
+    
+    def update(self, val, iter):
+        #print(val)
+        self.vals.append(val)
+       # print(self.vals)
+        self.iters.append(iter)
+
+
 class CachedRunningAverageMeter(object):
     """Computes and stores the weighted moving average (WMA) and current value over optimization iterations"""
 
