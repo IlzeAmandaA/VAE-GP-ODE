@@ -62,7 +62,7 @@ parser.add_argument('--num_inducing', type=int, default=100,
                     help="Number of inducing points for the sparse GP")
 parser.add_argument('--dimwise', type=eval, default=True,
                     help="Specify separate lengthscales for every output dimension")
-parser.add_argument('--variance', type=float, default=1.0,
+parser.add_argument('--variance', type=float, default=0.7,
                     help="Initial value for rbf variance")
 parser.add_argument('--lengthscale', type=float, default=2.0,
                     help="Initial value for rbf lengthscale")
@@ -89,7 +89,7 @@ parser.add_argument('--dt', type=float, default=0.1,
 
 
 # training arguments
-parser.add_argument('--Nepoch', type=int, default=10000,
+parser.add_argument('--Nepoch', type=int, default=5000,
                     help="Number of gradient steps for model training")
 parser.add_argument('--lr', type=float, default=0.001,
                     help="Learning rate for model training")
