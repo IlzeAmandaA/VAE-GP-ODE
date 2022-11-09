@@ -16,7 +16,7 @@ learning dynamics from high-dimensional data with a structured GP prior. Our mod
 The code was developed and tested with `python3.8` and `Pytorch 1.13`.
 
 ## Datasets
-**Fixed Initial Angle** : the rotating mnist dataset with fixed initial angle can be donwloaded from here. The data should be placed in `experiments/data/rot_mnist` directory.
+**Fixed Initial Angle** : the rotating mnist dataset with fixed initial angle can be donwloaded from [here](https://drive.google.com/drive/folders/1rOnMczoOXItqjM85VHo-LGvBjqcFctvn?usp=share_link). The data should be placed in `experiments/data/rot_mnist` directory.
 
 **Random Initial Angle** : the rotating mnist dataset with random intial angle can be created by running the code with flag `--rotrand True`, the code with automatically shuffle the existing data in the correct manner.
 
