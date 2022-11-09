@@ -53,6 +53,8 @@ All results will be stores in directotory results with a corresponding timestamp
 
 ## Results from Trained Models
 
+All trained models reported in the final paper can be downloaded from [here](https://drive.google.com/drive/folders/1UhvVTIKvapi53Uv6ltZJlvfVnDGwmzAf?usp=share_link)
+
 In the `plot_dynamics.ipynb` you can see the performance results of the trained models as reported in the final paper.
 
 In the `plot_dynamics_extended.ipynb` there are additional models reported for further investigation of the models sensitivty to the training setup. 
