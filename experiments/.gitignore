@@ -1,6 +1,6 @@
 *.mat
-data/mocap/
 data/rot_mnist/
+data/moving_mnist/
 data/__pycache__/
 model/__pycache__/
 core/__pycache__/
@@ -8,5 +8,4 @@ core/__pycache__/
 **/.DS_Store
 results/*
 *.zip
-*.png
 DF-kernel.ipynb

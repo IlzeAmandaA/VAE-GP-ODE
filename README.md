@@ -41,8 +41,9 @@ The main different is that the ouput and latent dimensionality is reduced to 3 a
 ```
 python main_vae.py --n_angle 16 --latent_dim 6
 ```
+Runnin the above will create a new data repository 'data/moving_mnist' where the training data for the VAE training will be stored. The rotation angle can be increased to also 64, meaning that there will be 64 timesteps for a full rotation. 
 
-Subsequently the model can be used in the GP-ODE training code as 
+Subsequently the trained VAE can be used in the GP-ODE training code as 
 
 ```
 python main.py --ode 1 --rotrand True --pretrained True --vae_path 'specify your model path'

@@ -3,6 +3,7 @@ import torch.nn as nn
 from torch.distributions import Normal
 from torchsummary import summary
 from model.misc.torch_utils import Flatten, UnFlatten
+import numpy as np
 
 EPSILON = 1e-3
 
@@ -108,8 +109,9 @@ class Decoder(nn.Module):
 
 
     def forward(self, x):
-        L,N,T,q = x.shape
-        s = self.fc(x.contiguous().view([L*N*T,q]) ) # N*T,q
+        #L,N,T,q = x.shape
+        #s = self.fc(x.contiguous().view([L*N*T,q]) ) # N*T,q
+        s = self.fc(x.contiguous().view([np.prod(list(x.shape[:-1])),x.shape[-1]]))        
         h = self.decnn(s)
         return h 
     
@@ -118,12 +120,15 @@ class Decoder(nn.Module):
         return next(self.parameters()).device
 
 
-    def log_prob(self, x,z, L=1):
+    def log_prob(self, x,z, L=1, pretrain=False):
         '''
         x           - input images [N,T,1,nc,nc]
         z           - reconstructions [L,N,T,1,nc,nc]
         '''
-        XL = x.repeat([L,1,1,1,1,1]) # L,N,T,nc,d,d 
+        if pretrain:
+            XL = x
+        else:
+            XL = x.repeat([L,1,1,1,1,1]) # L,N,T,nc,d,d 
         if self.distribution == 'bernoulli':
             try:
                 log_p = torch.log(z)*XL + torch.log(1-z)*(1-XL) # L,N,T,nc,d,d

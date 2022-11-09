@@ -200,14 +200,112 @@ def plot_trace(elbo_meter, nll_meter,  z_kl_meter, inducing_kl_meter, args, make
         np.save(os.path.join(args.save, 'zkl.npy'), np.stack((z_kl_meter.iters, z_kl_meter.vals), axis=1))
         np.save(os.path.join(args.save, 'inducingkl.npy'), np.stack((inducing_kl_meter.iters,inducing_kl_meter.vals), axis=1))
 
-
 def plot_vae_embeddings(encoder, dataloader, n_samples, device, n_classes=16, output_path=None):
     """Visualize the embeddings in the latent space"""
     # classes = list(np.linspace(0, n_classes-1, n_classes).astype(np.str))
     n = 0
     codes, labels = [], []
     with torch.no_grad():
-        encoder.eval()
+        for b_inputs, b_labels in dataloader:
+            batch_size = b_inputs.size(0)
+            b_codes = encoder(b_inputs.to(device))[0]
+            #b_codes, b_labels = b_codes.cpu().data.numpy(), b_labels.cpu().data.numpy()
+            if n + batch_size > n_samples:
+                codes.append(b_codes[: n_samples - n])
+                labels.append(b_labels[: n_samples - n])
+                break
+            else:
+                codes.append(b_codes)
+                labels.append(b_labels)
+                n += batch_size
+    #codes = np.vstack(codes)
+    codes = torch.cat(codes) # n_samples, q
+    labels = torch.cat(labels) # n_samples
+    labels = labels.cpu().numpy()
+    if codes.shape[1] > 2:
+        #do PCA here 
+        U,S,V = torch.pca_lowrank(codes)
+        codes = codes@V[:,:2] # n_samples, 2
+        codes = codes.cpu().numpy()
+        #codes = TSNE().fit_transform(codes)
+   # labels = np.hstack(labels)
+    fig, ax = plt.subplots(1)
+    pos = ax.get_position()
+    ax.set_position([pos.x0, pos.y0, pos.width * 0.8, pos.height], which="both")
+    color_map = plt.cm.get_cmap('hsv', n_classes)
+    for iclass in range(min(labels), max(labels) + 1):
+        ix = labels == iclass
+        ax.plot(codes[ix, 0], codes[ix, 1], ".", c=color_map(iclass))
+
+    # plt.legend(classes, bbox_to_anchor=(1.05, 1), loc="upper left", borderaxespad=0.0)
+    plt.tight_layout()
+    plt.suptitle("Latent embeddings of a sample datapoint using HSV colorcode", y=1)
+    if output_path is None:
+        plt.show()
+    else:
+        plt.savefig(os.path.join(output_path, "plots/latent-embeddings_pca.png"))
+
+
+def plot_trace_vae(elbo_meter, nll_meter,  z_kl_meter, args, make_plot=False): 
+    fig, axs = plt.subplots(1, 3, figsize=(20, 8))
+
+    axs[0].plot(elbo_meter.iters, elbo_meter.vals)
+    axs[0].set_title("Loss (-elbo) function")
+    axs[0].grid()
+    axs[1].plot(nll_meter.iters, nll_meter.vals)
+    axs[1].set_title("Observation NLL")
+    axs[1].grid()
+    axs[2].plot(z_kl_meter.iters, z_kl_meter.vals)
+    axs[2].set_title("KL rec")
+    axs[2].grid()
+
+    fig.subplots_adjust()
+    if make_plot:
+        plt.show()
+    else:
+        fig.savefig(os.path.join(args.output_path, 'plots/optimization_trace.png'), dpi=160,
+                    bbox_inches='tight', pad_inches=0.01)
+        plt.close(fig)
+
+def visualize_output(vae, x, output_path=None, logger=None):
+    y = vae.test(x)
+   # plot_rot_mnist(x, y, show=False, fname=os.path.join(output_path, "rot-mnist.png"))
+    plot_rand_rot_mnist(x,y,show=False, fname=os.path.join(output_path, "rot-mnist.png"))
+    mse = torch.mean((y-x)**2)
+    std = torch.std((y-x)**2)
+    logger.info('MSE {} (std {})'.format(mse.item(), std.item()))
+    y = y.cpu().detach().numpy().reshape(16, 28, 28)   
+
+    fig, axs = plt.subplots(4, 4, figsize=(8, 8))
+    for ax, img in zip(axs.flat, x.cpu()):
+        ax.imshow(img.reshape(28, 28), cmap="gray")
+        ax.axis('off')
+
+    plt.suptitle("Original image", y=1)
+    plt.tight_layout()
+    if output_path is None:
+        plt.show()
+    else:
+        plt.savefig(os.path.join(output_path, "vae-original.png"))
+
+    fig, axs = plt.subplots(4, 4, figsize=(8, 8))
+    for ax, img in zip(axs.flat, y):
+        ax.imshow(img.reshape(28, 28), cmap="gray")
+        ax.axis('off')
+    plt.suptitle("Predicted image", y=1)
+    plt.tight_layout()
+
+    if output_path is None:
+        plt.show()
+    else:
+        plt.savefig(os.path.join(output_path, "vae-prediction.png"))
+
+def visualize_embeddings(encoder, dataloader, n_samples, device, n_classes=16, output_path=None):
+    """Visualize the embeddings in the latent space"""
+    # classes = list(np.linspace(0, n_classes-1, n_classes).astype(np.str))
+    n = 0
+    codes, labels = [], []
+    with torch.no_grad():
         for b_inputs, b_labels in dataloader:
             batch_size = b_inputs.size(0)
             b_codes = encoder(b_inputs.to(device))[0]
@@ -241,74 +339,3 @@ def plot_vae_embeddings(encoder, dataloader, n_samples, device, n_classes=16, ou
         plt.show()
     else:
         plt.savefig(os.path.join(output_path, "latent-embeddings.png"))
-
-# def plot_vae_embeddings(encoder, dataloader, n_samples, device, n_classes=16, output_path=None):
-#     """Visualize the embeddings in the latent space"""
-#     # classes = list(np.linspace(0, n_classes-1, n_classes).astype(np.str))
-#     n = 0
-#     codes, labels = [], []
-#     with torch.no_grad():
-#         for b_inputs, b_labels in dataloader:
-#             batch_size = b_inputs.size(0)
-#             b_codes = encoder(b_inputs.to(device))[0]
-#             #b_codes, b_labels = b_codes.cpu().data.numpy(), b_labels.cpu().data.numpy()
-#             if n + batch_size > n_samples:
-#                 codes.append(b_codes[: n_samples - n])
-#                 labels.append(b_labels[: n_samples - n])
-#                 break
-#             else:
-#                 codes.append(b_codes)
-#                 labels.append(b_labels)
-#                 n += batch_size
-#     #codes = np.vstack(codes)
-#     codes = torch.cat(codes) # n_samples, q
-#     labels = torch.cat(labels) # n_samples
-#     labels = labels.cpu().numpy()
-#     if codes.shape[1] > 2:
-#         #do PCA here 
-#         U,S,V = torch.pca_lowrank(codes)
-#         codes = codes@V[:,:2] # n_samples, 2
-#         codes = codes.cpu().numpy()
-#         #codes = TSNE().fit_transform(codes)
-#    # labels = np.hstack(labels)
-#     fig, ax = plt.subplots(1)
-#     pos = ax.get_position()
-#     ax.set_position([pos.x0, pos.y0, pos.width * 0.8, pos.height], which="both")
-#     color_map = plt.cm.get_cmap('hsv', n_classes)
-#     for iclass in range(min(labels), max(labels) + 1):
-#         ix = labels == iclass
-#         ax.plot(codes[ix, 0], codes[ix, 1], ".", c=color_map(iclass))
-
-#     # plt.legend(classes, bbox_to_anchor=(1.05, 1), loc="upper left", borderaxespad=0.0)
-#     plt.tight_layout()
-#     plt.suptitle("Latent embeddings of a sample datapoint using HSV colorcode", y=1)
-#     if output_path is None:
-#         plt.show()
-#     else:
-#         plt.savefig(os.path.join(output_path, "plots/latent-embeddings.png"))
-
-def plot_trace_vae(elbo_meter, nll_meter,  z_kl_meter, args, make_plot=False): 
-    fig, axs = plt.subplots(1, 3, figsize=(20, 8))
-
-    axs[0].plot(elbo_meter.iters, elbo_meter.vals)
-    axs[0].set_title("Loss (-elbo) function")
-    axs[0].grid()
-    axs[1].plot(nll_meter.iters, nll_meter.vals)
-    axs[1].set_title("Observation NLL")
-    axs[1].grid()
-    axs[2].plot(z_kl_meter.iters, z_kl_meter.vals)
-    axs[2].set_title("KL rec")
-    axs[2].grid()
-
-    fig.subplots_adjust()
-    if make_plot:
-        plt.show()
-    else:
-        fig.savefig(os.path.join(args.save, 'plots/optimization_trace.png'), dpi=160,
-                    bbox_inches='tight', pad_inches=0.01)
-        plt.close(fig)
-
-
-def plot_vectorfield():
-
-    pass
