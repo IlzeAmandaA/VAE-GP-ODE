@@ -29,6 +29,20 @@ class VAE(nn.Module):
         if self.order==2:
             summary(self.encoder_v, (1,*(28,28)))
 
+    def save(self, encoder_path=None, decoder_path=None):
+        """Save the VAE model. Both encoder and decoder and saved in different files."""
+        torch.save(self.encoder.state_dict(), encoder_path)
+        torch.save(self.decoder.state_dict(), decoder_path)
+
+    def test(self, x):
+        """Test the VAE model on data x. First x is encoded using encoder model, a sample is produced from then latent
+        distribution and then it is passed through the decoder model."""
+        self.encoder.eval()
+        self.decoder.eval()
+        enc_m, enc_log_var = self.encoder(x)
+        z = self.encoder.sample(enc_m, enc_log_var)
+        y = self.decoder(z)
+        return y
 
 class Encoder(nn.Module):
     def __init__(self,  latent_dim=16, n_filt=8,frames=1):

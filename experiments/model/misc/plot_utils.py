@@ -55,7 +55,7 @@ def plot_rot_mnist(X, Xrec, show=False, fname='rot_mnist.png', N=None):
 
 
 def plot_rand_rot_mnist(X, Xrec, show=False, fname='rot_mnist.png', rows=4):
-    N = min(X.shape[0],6)
+    N = min(X.shape[0],4)
     Xnp = X.detach().cpu().numpy() #B,1,nc,nc
     Xrecnp = Xrec.detach().cpu().numpy()
     plt.figure(2,(N,3*rows))
@@ -270,7 +270,7 @@ def plot_trace_vae(elbo_meter, nll_meter,  z_kl_meter, args, make_plot=False):
 def visualize_output(vae, x, output_path=None, logger=None):
     y = vae.test(x)
    # plot_rot_mnist(x, y, show=False, fname=os.path.join(output_path, "rot-mnist.png"))
-    plot_rand_rot_mnist(x,y,show=False, fname=os.path.join(output_path, "rot-mnist.png"))
+    plot_rand_rot_mnist(x,y,show=False, fname=os.path.join(output_path, "rot-mnist.png"), rows=3)
     mse = torch.mean((y-x)**2)
     std = torch.std((y-x)**2)
     logger.info('MSE {} (std {})'.format(mse.item(), std.item()))

@@ -192,7 +192,7 @@ if __name__ == '__main__':
     )
 
     visualize_embeddings(
-        vae.get_encoder(), test_loader, 1000, args.device, n_classes=args.n_angle, output_path=args.output_path
+        vae.encoder, test_loader, 1000, args.device, n_classes=args.n_angle, output_path=args.output_path
     )
 
     plot_vae_embeddings(vae.encoder, test_loader, 1000, args.device, n_classes=args.n_angle, output_path=args.output_path)
