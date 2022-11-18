@@ -59,3 +59,9 @@ In the `plot_dynamics.ipynb` you can see the performance results of the trained 
 
 In the `plot_dynamics_extended.ipynb` there are additional models reported for further investigation of the models sensitivty to the training setup. 
 
+
+![plot](Results.png)
+*Figure 1. Reconstructed test sequences. Top row: ground truth. Second row: Pretrained VAE (model according to \cite{solin2021scalable}). Bottom 3 rows: VAE-GP-ODE with varying order differential equation ($1^\text{st}$ or $2^\text{nd}$ order), and without (RBF kernel) or with (DF kernel) informative prior. \\ Conditioning: input for the encoder ($1^\text{st}$ ODE only $\mathbf{x}_1$, $2^\text{nd}$ ODE $\mathbf{x}_{1:5}$ frames); Extrapolation: model's prediction within the training data sequence length ($T_{max}=16$); Forecasting: model's prediction outside the training data sequence length ($T>16$).* 
+
+![plot](LatentSpace.png)
+*Figure 2. Latent space for first-order ODE, DF kernel. Each color corresponds to a latent trajectory associated with a distinct data sample. A circle indicates the start of the trajectory and the subsequent stars a subsequent time point up until T=32.*
