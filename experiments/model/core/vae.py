@@ -73,7 +73,7 @@ class Encoder(nn.Module):
         return z0_mu, z0_log_std
 
     def sample(self, mu, logvar):
-        std = torch.exp(0.5*logvar)
+        std = logvar.exp()
         eps = torch.randn_like(std)
         return mu + std * eps
 
@@ -124,8 +124,6 @@ class Decoder(nn.Module):
 
 
     def forward(self, x):
-        #L,N,T,q = x.shape
-        #s = self.fc(x.contiguous().view([L*N*T,q]) ) # N*T,q
         s = self.fc(x.contiguous().view([np.prod(list(x.shape[:-1])),x.shape[-1]]))        
         h = self.decnn(s)
         return h 
