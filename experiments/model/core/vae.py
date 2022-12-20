@@ -59,17 +59,18 @@ class Encoder(nn.Module):
             nn.ReLU(),
             nn.Conv2d(n_filt*2, n_filt*4, kernel_size=5, stride=2, padding=(2,2)),
             nn.ReLU(),
-            Flatten()
+            nn.Flatten()
         )
 
 
-        self.fc1 = nn.Linear(in_features,latent_dim)
-        self.fc2 = nn.Linear(in_features, latent_dim)
+        self.fc = nn.Linear(in_features,2*latent_dim)
+        # self.fc2 = nn.Linear(in_features, latent_dim)
 
     def forward(self, x):
-        h = self.cnn(x)
-        z0_mu, z0_log_sig_sq = self.fc1(h), self.fc2(h) # N,q & N,q
-        return z0_mu, z0_log_sig_sq
+        z = self.cnn(x)
+        z = self.fc(z)
+        z0_mu, z0_log_std = z.chunk(2,dim=-1) # N,q & N,q
+        return z0_mu, z0_log_std
 
     def sample(self, mu, logvar):
         std = torch.exp(0.5*logvar)
@@ -86,10 +87,10 @@ class Encoder(nn.Module):
             log_v = logvar_s
 
         
-        std_ = nn.functional.softplus(log_v)
-        if torch.isnan(std_).any():
-            std_ = EPSILON + nn.functional.softplus(log_v)
-
+        #std_ = nn.functional.softplus(log_v)
+        std_ = torch.exp(0.5*log_v)
+        # if torch.isnan(std_).any():
+        #     std_ = EPSILON + nn.functional.softplus(log_v)
         return Normal(means, std_) #N,q
 
     @property

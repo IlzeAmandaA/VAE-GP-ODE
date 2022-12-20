@@ -136,17 +136,9 @@ class SVGP_Layer(torch.nn.Module):
         # compute pathwise updates 
         f_update = self.kern.f_update(x, self.inducing_loc()) #N, D 
 
-        # # sample from the GP posterior
-        # if self.kernel_n == 'DF':
-        #    # print('fprior', f_prior[0,0:10])
-        #     f_prior = torch.reshape(f_prior, (x.shape[0],self.D_in, self.D_out, self.D_in))
-        #    # print('fupdate', f_update[0,0:10])
-        #     f_update = torch.reshape(f_update, (x.shape[0],self.D_in, self.D_out, self.D_in))
-        #     dx = torch.einsum('nidj, nidj -> nd', f_prior, f_update)
-        # else:           
+        # sample from the GP posterior         
         dx = f_prior + f_update 
 
-       # print(dx[0,:])
         return dx  # (N,D_out)
 
     def kl(self):

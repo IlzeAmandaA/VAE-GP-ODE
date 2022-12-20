@@ -102,7 +102,7 @@ parser.add_argument('--seed', type=int, default=121,
 parser.add_argument('--log_freq', type=int, default=5,
                     help="Logging frequency while training")
 parser.add_argument('--device', type=str, default='cuda:0',
-                    help="device")
+                    help="place holder for device")
 parser.add_argument('--continue_training', type=eval, default=False,
                     help="If set to True continoues training of a previous model")
 parser.add_argument('--model_path', type=str, default='None',
@@ -142,6 +142,7 @@ if __name__ == '__main__':
     seed_everything(args.seed)
 
     ########### device #######
+    args.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     logger.info('Running model on {}'.format(args.device))
 
     ########### data ############ 
