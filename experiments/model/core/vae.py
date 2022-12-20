@@ -73,7 +73,7 @@ class Encoder(nn.Module):
         return z0_mu, z0_log_std
 
     def sample(self, mu, logvar):
-        std = logvar.exp()
+        std = torch.exp(0.5*logvar)
         eps = torch.randn_like(std)
         return mu + std * eps
 
