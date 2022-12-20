@@ -23,30 +23,57 @@ def rot_start(Xtr, T, N ):
 
 
 def load_mnist_data(args, plot=True):
-	fullname = os.path.join(args.data_root, "rot_mnist", "rot-mnist.mat")
+	fullname = os.path.join('data', "rot_mnist", "rot-mnist.mat")
 	dataset = sio.loadmat(fullname)
-	
+
 	X = np.squeeze(dataset['X'])
-	if args.mask:
+	if True:
 		Y = np.squeeze(dataset['Y'])
-		X = X[Y==args.value,:,:]
+		X = X[Y==3,:,:]
 
-	N = args.Ndata
-	Nt = args.Ntest + N
-	T = args.T #16
-	Xtr   = torch.tensor(X[:N],dtype=torch.float32).view([N,T,1,28,28])
-	Xtest = torch.tensor(X[N:Nt],dtype=torch.float32).view([-1,T,1,28,28])
-
-	if args.rotrand:
-		Xtr = rot_start(Xtr,T,N)
-		Xtest = rot_start(Xtest, T, Xtest.shape[0])
+	N = 360
+	Nvalid = 40 + N
+	Ntest = 40 + Nvalid
+	T = 16
+	#Xtr   = torch.tensor(X[:N],dtype=torch.float32).view([N,T,1,28,28])
+	#Xvalid = torch.tensor(X[N:Nvalid],dtype=torch.float32).view([-1,T,1,28,28])
+	#Xtest = torch.tensor(X[Nvalid:Ntest],dtype=torch.float32).view([-1,T,1,28,28])
 
 	# Generators
-	params = {'batch_size': args.batch, 'shuffle': True, 'num_workers': 2} #25
-	trainset = Dataset(Xtr)
+	params = {'batch_size': 20, 'shuffle': True, 'num_workers': 1} #25
+	#trainset = Dataset(Xtr)
+	trainset = Dataset(X[:N])
 	trainset = data.DataLoader(trainset, **params)
-	testset  = Dataset(Xtest)
+	#validset  = Dataset(Xvalid)
+	validset  = Dataset(X[N:Nvalid])
+	validset  = data.DataLoader(validset, **params)
+	#testset  = Dataset(Xtest)
+	testset  = Dataset(X[Nvalid:Ntest])
 	testset  = data.DataLoader(testset, **params)
+	# fullname = os.path.join(args.data_root, "rot_mnist", "rot-mnist.mat")
+	# dataset = sio.loadmat(fullname)
+	
+	# X = np.squeeze(dataset['X'])
+	# if args.mask:
+	# 	Y = np.squeeze(dataset['Y'])
+	# 	X = X[Y==args.value,:,:]
+
+	# N = args.Ndata
+	# Nt = args.Ntest + N
+	# T = args.T #16
+	# Xtr   = torch.tensor(X[:N],dtype=torch.float32).view([N,T,1,28,28])
+	# Xtest = torch.tensor(X[N:Nt],dtype=torch.float32).view([-1,T,1,28,28])
+
+	# if args.rotrand:
+	# 	Xtr = rot_start(Xtr,T,N)
+	# 	Xtest = rot_start(Xtest, T, Xtest.shape[0])
+
+	# # Generators
+	# params = {'batch_size': args.batch, 'shuffle': True, 'num_workers': 2} #25
+	# trainset = Dataset(Xtr)
+	# trainset = data.DataLoader(trainset, **params)
+	# testset  = Dataset(Xtest)
+	# testset  = data.DataLoader(testset, **params)
 
 	if plot:
 		x = next(iter(trainset))
