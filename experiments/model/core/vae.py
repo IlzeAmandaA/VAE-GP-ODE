@@ -86,12 +86,9 @@ class Encoder(nn.Module):
             means = mu_s
             log_v = logvar_s
 
-        
-        std_ = nn.functional.softplus(log_v)
-        if torch.isnan(std_).any():
-            std_ = EPSILON + nn.functional.softplus(log_v)
+        std = torch.exp(0.5*log_v)
 
-        return Normal(means, std_) #N,q
+        return Normal(means, std) #N,q
 
     @property
     def device(self):
