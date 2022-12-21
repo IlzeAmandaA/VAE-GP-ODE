@@ -65,11 +65,10 @@ class Encoder(nn.Module):
 
         self.fc1 = nn.Linear(in_features,latent_dim)
         self.fc2 = nn.Linear(in_features, latent_dim)
-        self.sp = nn.Softplus()
 
     def forward(self, x):
         h = self.cnn(x)
-        z0_mu, z0_log_sig_sq = self.fc1(h), self.sp(self.fc2(h)) # N,q & N,q
+        z0_mu, z0_log_sig_sq = self.fc1(h), self.fc2(h) # N,q & N,q
         return z0_mu, z0_log_sig_sq
 
     def sample(self, mu, logvar):
