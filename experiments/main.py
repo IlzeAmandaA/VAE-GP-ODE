@@ -186,6 +186,8 @@ if __name__ == '__main__':
     mse_meter = log_utils.CachedAverageMeter()
     time_meter = log_utils.CachedAverageMeter()
     hyperparam_meter = log_utils.CachedHyperparametrs()
+    hyperparam_meter.update(odegpvae.flow.odefunc.diffeq.kern.variance.data.detach().cpu().numpy(), 0)
+            
 
     # ########### train ###########
     optimizer = torch.optim.Adam(odegpvae.parameters(),lr=args.lr)
@@ -213,7 +215,7 @@ if __name__ == '__main__':
             reg_kl_meter.update(kl_reg.item(), global_itr)
             inducing_kl_meter.update(kl_u.item(), global_itr)
             time_meter.update(time.time() - begin, global_itr)
-            hyperparam_meter.update(odegpvae.flow.odefunc.diffeq.kern.variance.data.detach().cpu().numpy(), global_itr)
+            hyperparam_meter.update(odegpvae.flow.odefunc.diffeq.kern.variance.data.detach().cpu().numpy(), global_itr+1)
             global_itr +=1
 
             if itr % args.log_freq == 0 :
