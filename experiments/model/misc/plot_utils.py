@@ -101,20 +101,24 @@ def plot_latent_dynamics(model, data, args, fname):
 def plot_latent_state(st_mu, show=False, fname='latent_dyanamics'):
     N,T,q = st_mu.shape
     st_mu = st_mu.detach() # N,T,q   
-    if q<2:
+    if q>2:
         st_mu = st_mu.reshape(N*T,q) #NT,q
         U,S,V = torch.pca_lowrank(st_mu)
         st_pca = st_mu@V[:,:2] 
         st_pca =  st_pca.reshape(N,T,2).cpu().numpy() # N,T,2
+        S = S / S.sum()
     else:
         st_pca = st_mu.cpu().numpy()
     plt.figure(1,(5,5))
     for n in range(N):
         p, = plt.plot(st_pca[n,0,0],st_pca[n,0,1],'o',markersize=10)
         plt.plot(st_pca[n,:,0],st_pca[n,:,1],'-*', color=p.get_color())
+    if q>2:
+        plt.xlabel('PCA-1  ({:.2f})'.format(S[0]),fontsize=15)
+        plt.ylabel('PCA-2  ({:.2f})'.format(S[1]),fontsize=15)
 
-    plt.xlabel('PCA-1',fontsize=15)
-    plt.ylabel('PCA-2',fontsize=15)
+    # plt.xlabel('PCA-1',fontsize=15)
+    # plt.ylabel('PCA-2',fontsize=15)
     plt.title('Latent trajectories',fontsize=18)
     plt.grid()
     plt.tight_layout()

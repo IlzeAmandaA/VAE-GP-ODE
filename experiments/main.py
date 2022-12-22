@@ -93,16 +93,14 @@ parser.add_argument('--Nepoch', type=int, default=5000,
                     help="Number of gradient steps for model training")
 parser.add_argument('--lr', type=float, default=0.001,
                     help="Learning rate for model training")
-parser.add_argument('--eval_sample_size', type=int, default=128,
-                    help="Number of posterior samples to evaluate the model predictive performance")
 parser.add_argument('--save', type=str, default='results/mnist',
                     help="Directory name for saving all the model outputs")
 parser.add_argument('--seed', type=int, default=121,
                     help="Global seed for the training run")
 parser.add_argument('--log_freq', type=int, default=5,
                     help="Logging frequency while training")
-parser.add_argument('--device', type=str, default='cuda:0',
-                    help="device")
+parser.add_argument('--device', type=str, default='None',
+                    help="palce holder for device")
 parser.add_argument('--continue_training', type=eval, default=False,
                     help="If set to True continoues training of a previous model")
 parser.add_argument('--model_path', type=str, default='None',
@@ -142,6 +140,7 @@ if __name__ == '__main__':
     seed_everything(args.seed)
 
     ########### device #######
+    args.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     logger.info('Running model on {}'.format(args.device))
 
     ########### data ############ 
@@ -151,7 +150,6 @@ if __name__ == '__main__':
     odegpvae = build_model(args)
     odegpvae.to(args.device)
     odegpvae = initialize_and_fix_kernel_parameters(odegpvae, lengthscale_value=args.lengthscale, variance_value=args.variance, fix=False) #1.25, 0.5, 0.65 0.25
-    
 
     #### load pre-trained VAE ######
     if args.pretrained:
