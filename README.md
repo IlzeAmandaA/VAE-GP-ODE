@@ -1,6 +1,6 @@
 # Latent GP-ODEs with Informative Priors
 
-Pytroch implementation of Neurips 22 workshop paper Latent GP-ODEs with Informative Priors by Ilze Amanda Auzina, Cagatay Yildiz and Efstratios Gavves.
+Pytroch implementation of Neurips 22 workshop paper Latent GP-ODEs with Informative Priors by Ilze Amanda Auzina, Cagatay Yildiz and Efstratios Gavves. [Paper](https://openreview.net/forum?id=vj9vS27Gq6P)
 
 We tackle the exisitng limitations of GP-ODE models:
 
